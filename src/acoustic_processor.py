@@ -7,14 +7,14 @@ TARGET_SR = 16000 # target sample rate – placeholder value but a common one
 
 # --- Prepare data for model input ---
 
-def load_and_preprocess_audio(audio_path: str) -> np.ndarray: # the load_and_preprocess_audio function takes in audio_path, which should be a string and expects an np.ndarray as a result / these are hints and not enforced
+def load_and_preprocess_audio(audio_path: str) -> np.ndarray: # the load_and_preprocess_audio function takes in audio_path, which will be an argument entered at function call, should be a string and expects an np.ndarray as a result (these are hints and not enforced)
     """Loads, resamples, and prepares audio data for ONNX input.""" #docstring for documentation and tools like help()
     print(f"Loading audio data from {audio_path}…")
 
-    audio_data, current_sr = librosa.load( # tuple unpacking: the librosa.load function produces two values, the audio data and current sample rate
-        audio_path,
-        sr=TARGET_SR, #Librosa will resample to that rate automatically, so current_sr will always equal TARGET_SR
-        mono=True
+    audio_data, current_sr = librosa.load( # tuple unpacking: the librosa.load function produces two values, the audio data (NumPy array containing the audio time series) and current sample rate, based on the load arguments…
+        audio_path, # input file path
+        sr=TARGET_SR, #Librosa will resample to that rate automatically, so current_sr will always equal TARGET_SR; this saves memory and additional steps
+        mono=True #transform to mono
     )
 
     if audio_data.dtype != np.float32: # if audio data isn't a float32 format
@@ -29,8 +29,8 @@ def load_and_preprocess_audio(audio_path: str) -> np.ndarray: # the load_and_pre
 # --- Model harness wrapping the model in the contextual logic: loading onnx model, preparing input, calling inference session and interpreting the output ---
 
 class AcousticModelProcessor:
-    def __init__(self, onnx_path: str): # takes in model from onnx_path
-        self.sess = rt.InferenceSession(onnx_path) #initializes Inference Session using onnx runtime and taking in model from onnx_path
+    def __init__(self, onnx_path: str): # initialize instance taking in model from onnx_path
+        self.sess = rt.InferenceSession(onnx_path) #initializes Inference Session to make predicitions using onnx runtime and taking in model from onnx_path
 
         self.input_name = self.sess.get_inputs()[0].name #returns a list of input objects (each an onnxruntime.NodeArg). Each of those has a .name attribute — a string matching the input tensor name defined when the model was exported.
         self.output_name = self.sess.get_outputs()[0].name # same as above but for output tensors

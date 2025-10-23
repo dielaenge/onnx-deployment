@@ -1,7 +1,7 @@
 {
     "source_file": "test_audio.wav",
     "input_audio_samples": 66000,
-    "preprocessing_time_ms": 0.015,
+    "preprocessing_time_ms": 0.066,
     "vector_shape": [
         1,
         512

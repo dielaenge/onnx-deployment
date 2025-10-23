@@ -8,7 +8,7 @@ ACOUSTIC_VECTOR_DIM = 512 # D: dimensions of processed audio
 MOCK_INPUT_LENGTH = 16000 * 5 # N: 5 seconds of audio at 16kHz
 
 class DummyAcousticModel(nn.Module): # Create a DummyAcousticModel class, inheriting from nn.Module
-    def __init__(self, output_dim): # initialize the model; requires output dimension
+    def __init__(self, output_dim): # initialize the model; requires output dimension, later ACOUSTIC_VECTOR_DIM is used
         super().__init__() # call the parent class (nn.Module) constructor
         self.output_dim = output_dim # make output dimension available through the DummyAcosuticModel instance
         self.projection = nn.Linear(1, output_dim, bias=False) # create a linear layer to project input to output dimension; torch.nn.Linear(in_features=size of each input sample, out_features=size of each output sample, …)
