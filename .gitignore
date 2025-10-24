@@ -2,3 +2,10 @@ assets/
 .venv/ 
 doc/
 DOCUMENTATION.md
+*.pyc
+__pycache__/
+venv/
+
+# Project specific artifacts
+acoustic_vector.json # Output file
+test_audio.*         # Sample input file
