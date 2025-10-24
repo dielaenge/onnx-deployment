@@ -3,8 +3,13 @@ import time
 import json
 import numpy as np
 from typing import Annotated
-from src.acoustic_processor import AcousticModelProcessor, load_and_preprocess_audio
+from src.model_processor import AcousticModelProcessor
+from src.audio_processor import preprocess_from_path
 from memory_profiler import profile
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s %(levelname)s - %(message)s')
+logger = logging.getLogger("CLI")
 
 # set up typer CLI app
 app = typer.Typer()
@@ -38,15 +43,16 @@ def main( # was "generate" but switched to "main" because its a single command a
     output_json: Annotated[str, typer.Option("--output", "-o", help="File path to save the resulting vector JSON")] = "acoustic_vector.json",
 ):
     """
-    Generates the acoustic vector from an input audio file an measures performance.
+    Generates the acoustic vector from an input audio file and measures performance.
     """
-    typer.echo(f"--- Starting acoustic vector generation for: {audio_path} ---")
+    logger.info("Starting acoustic vector generation for: %s", audio_path)
 
     try:
         # --- Preprocessing and Profiling Setup ---
 
         # 1. Load and preprocess audio
-        preprocessed_audio = load_and_preprocess_audio(audio_path)
+        preprocessed_audio = preprocess_from_path(audio_path)
+        logger.info("Preprocessed audio shape: %s", preprocessed_audio.shape)
         # 2. Load inference and time it
         vector, processing_time_ms = profile_inference(processor, preprocessed_audio)
         # 3. Document the output
@@ -66,8 +72,13 @@ def main( # was "generate" but switched to "main" because its a single command a
         typer.echo(f"Vector Shape: {output_data['vector_shape']}")
         typer.echo(f"Vector saved to {output_json}")
 
+        logger.info("Inference Time: %.3f ms", processing_time_ms)
+        logger.info("Vector shape: %s", output_data["vector_shape"])
+        logger.info("Vector saved to %s", output_json)
+
     except Exception as e:
         typer.echo(f"\nFATAL ERROR: Failed during processing: {e}", err=True)
+        logger.error("FATAL ERROR: Failed during processing: %s", e, exc_info=True)
         raise typer.Exit(code=1)
     
 if __name__=="__main__":
