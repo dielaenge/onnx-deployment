@@ -1,10 +1,6 @@
-assets/
-.venv/ 
-doc/
-DOCUMENTATION.md
-*.pyc
-__pycache__/
-venv/
+*.pyc # Compiled Python files
+__pycache__/ # Python cache files
+venv/ # Python virtual environment
 
 # Project specific artifacts
 acoustic_vector.json # Output file
