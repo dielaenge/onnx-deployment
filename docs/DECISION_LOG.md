@@ -102,15 +102,39 @@
 
       #### Cleaning .gitignore
    
+2. ## Phase 2: Naive EC2 Deployment - Initial Instance Configuration
+
+**Date:** 2025-10-26 – 2025-10-27
+
+### 1. Decision: EC2 Architecture and Instance Type
+
+*   **Choice:**
+    * **AMI:** Amazon-Linux 2023 kernel-6.1 AMI (x86_64 architecture, suggested by AWS)
+    * **Instance Type:** `t2.micro` (1vCPU, 1GiB RAM memory)
+*   **Reasoning:**
+    * My primary constraint here was to move with caution and try to build with free tier resources while meeting the compute requirements.
+    From the local deployment I learned that the app was using  > 210 MiB in working memory which would make 0.5 GiB RAM (t2.nano) quite tight and so I chose the `t2.micro` with 1GiB RAM is within the free tier, providing a robust buffer for the OS and application runtime.
+    * I chose the Amazon-Linux 2023 kernel-6.1 AMI because it's an up-to-date AWS supported default, which ensures up-to-date packages and security patches.
+*   **Alternaitves considered:** 
+    * If this free tier instance doesn't meet the compute requirements, or when the free tier ends, my first alternative choice would be a `t4g.micro`, so a Graviton/arm64 architecture, as it offers the best price performance and is the more modern hardware and therefor more sustainable to learn and build on.
+
+### 2. Decision: Network Security (Security Groups)
+
+*   **Choice: A security group with 2 rules**
+    * **Rule 1: SSH Access for instance management:** 
+    * To keep the setup as basic as possible, for remote access of the instance OS, we will set up a Security Group allowing access to the instance's network interface via SSH protocol on port22, restricted to my IP address.
+    * **Rule 2: Public HTTP access:** 
+    * Because Security Groups are Layer 4 FWs TCP is defined as the protocol as it transports HTTP. So we allow all traffic on port 8000 like its defined in our app, `0.0.0.0:8000`. In a later stage an ALB will handle the SSL certificat handling and provide HTTPS security.
+*   **Alternatives/Rejected:**
+    * Using a `0.0.0.0/0` rule (SGs always allow/never deny) for both SGs and on both ports, was considered and rejected.
+
+### 3. Decision: Instance Access
+
+*   **Choice:** SSH keys / EC2 key pair
+    * I chose the key pair as the most basic means of accessing the instance and experiencing the fundamentals. I'll download a `.pem` file at instance launch and use it to connect via my local SSH client.
+*   **Alternatives/Rejected:**
+    * Though being used to EC2 instance connect from Adrian Cantrill's SAA C03 course, I rejected the method, to keep the deployment *naive*.
 
 
-
-2. ## Naive cloud deployment
-
-
-
-
-
-   
 
 
