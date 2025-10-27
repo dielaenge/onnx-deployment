@@ -1,8 +1,9 @@
-*.pyc # Compiled Python files
-__pycache__/ # Python cache files
-venv/ # Python virtual environment
-docs/diary.md
+*.pyc                   # Compiled Python files
+__pycache__/            # Python cache files
+venv/                   # Python virtual environment
+.DS_Store               # macOS file system metadata    
 
 # Project specific artifacts
-acoustic_vector.json # Output file
-test_audio.*         # Sample input file
+acoustic_vector.json    # Output file
+test_audio.*            # Sample input file
+docs/diary.md           # Personal diary entries
