@@ -1,6 +1,7 @@
 *.pyc # Compiled Python files
 __pycache__/ # Python cache files
 venv/ # Python virtual environment
+docs/diary.md
 
 # Project specific artifacts
 acoustic_vector.json # Output file

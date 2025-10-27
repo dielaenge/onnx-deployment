@@ -1,0 +1,11 @@
+# web framework
+fastapi
+uvicorn
+python-multipart
+
+# ML and audio processing
+onnxruntime
+numpy
+librosa
+soundfile
+
