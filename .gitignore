@@ -38,3 +38,4 @@ docs/notes.md
 create_dummy_model.py
 dummy_acoustic_model.onnx
 docs/LLM-comments_acoustic_processor.py
+docs/pnotes.md
