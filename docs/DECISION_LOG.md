@@ -45,7 +45,45 @@ Initial Instance Configuration
     *   **Systems Manager Session Manager:** This is a more secure, modern approach that avoids SSH key management. It will be implemented in a later "production-like" phase to demonstrate best practices.
 
 
+### 4. Decision: Instance Bootstrapping and Code Deployment
 
-   
+**Date:** 2023-10-29
+
+*   **Problem:** For the naive deployment a bare EC2 instance needs to be configured with the required dependencies and app code before the API can run. 
+We will first do this manually via SSH in this step to experience the repetitivness and error proness. In a next step we will use the UserData script automate this
+
+*   **Decision 1: How to get the model file onto the server?**
+    *   **Choice:** We will create the dummy model locally and then save it to our instance.
+    *   **Justification:** In the local deployment I created a script to create a dummy onnx model which I used as a placeholder model. As this model creation is not an important deliverable in the project but just a helper tool which will then be replaced by the *real* model of my collaborator, it's more efficient to only upload the dummy onnx model and then later replace it with the real model. The `create_dummy_model.py` thus stays local.
+
+*   **Decision 2: What needs to be configured and how?**
+    *   **Choice:** We will access the instance via SSH and run all commands manually: updating the server, installing python, install requirements, install other dependencies like ffmpeg, clone the app code from our git repository including the onnx model and finally start our app
+
+    *   **bash commands:**
+        ```bash
+
+        sudo dnf update -y
+
+        sudo dnf install python3
+
+        sudo python3 pip install git ffmpeg -y
+
+        #clone repository from url
+        #switch into project folder
+        
+        pip install -r requirements.txt
+
+        # at some point we should be able to run python3 api.py
+
+        ```
+
+    *   **Justification:** This process is very error prone but it thereby shows the quality and benefit of automation through the User Data script
+
+*   **Decision 3: Use the User Data script to automate the instance setup   
+    *   **Choice:** This is not really a coice or a decision, just a best practice, isn't it?
+    *   **bash commands:**
+    ```
+    #rewrite bash commands to 1 script
+    ```
 
 
