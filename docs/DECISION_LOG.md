@@ -50,40 +50,37 @@ Initial Instance Configuration
 **Date:** 2023-10-29
 
 *   **Problem:** For the naive deployment a bare EC2 instance needs to be configured with the required dependencies and app code before the API can run. 
-We will first do this manually via SSH in this step to experience the repetitivness and error proness. In a next step we will use the UserData script automate this
+We will first do this manually via SSH to experience the repetitiveness and error proness. In a next step we will use the UserData script to automate this.
 
-*   **Decision 1: How to get the model file onto the server?**
-    *   **Choice:** We will create the dummy model locally and then save it to our instance.
-    *   **Justification:** In the local deployment I created a script to create a dummy onnx model which I used as a placeholder model. As this model creation is not an important deliverable in the project but just a helper tool which will then be replaced by the *real* model of my collaborator, it's more efficient to only upload the dummy onnx model and then later replace it with the real model. The `create_dummy_model.py` thus stays local.
+*   **Decision 1: Model file handling**
+    *   **Choice:** We will create the dummy model in our local repository and then `git clone` it to our instance later.
+    *   **Justification:** During the local deployment I created a script to create a dummy onnx model which I then used as a placeholder model. As this model creation is not an important deliverable in the project but just a helper tool which will then be replaced by the *real* model of my collaborator, it's more efficient to only have the dummy onnx model as part of the repository and then later replace it with the real model. Furthermore, running the script locally avoids downloading large model creation dependencies like `torch` to our instance. The `create_dummy_model.py` thus stays local.
 
 *   **Decision 2: What needs to be configured and how?**
-    *   **Choice:** We will access the instance via SSH and run all commands manually: updating the server, installing python, install requirements, install other dependencies like ffmpeg, clone the app code from our git repository including the onnx model and finally start our app
+    *   **Choice:** We will access the instance via SSH and run all commands manually in a single SSH session: updating the server,install necessary system packages and python, cloning the app code from our git repository including the onnx model and finally start our app.
+    *   **Justification:** The manual process is intentional as it highlights the friction and error potential, making a case for the automation in later phases.
 
     *   **bash commands:**
         ```bash
-
+        # 1. Update all preinstalled packages to their latest versions (and confirm all occuring dialogs)
         sudo dnf update -y
 
-        sudo dnf install python3
-
-        sudo python3 pip install git ffmpeg -y
-
-        #clone repository from url
-        #switch into project folder
+        # 2. Install required system packages (git, ffmpeg, python-pip3 - Python3.9 is preinstalled on AL2023 AMIs) and confirm all occuring dialogs
+        sudo dnf install ffmpeg git python3-pip -y
+ 
+        # 3. Clone project repository from url
         
-        pip install -r requirements.txt
+        sudo git clone https://github.com/dielaenge/onnx-deployment.git
+        
+        # 4. Switch into project folder and install requirements
+        
+        cd onnx-acoustic/
 
-        # at some point we should be able to run python3 api.py
+        pip3 install -r requirements.txt
 
+        # 5. Start the FastAPI application
+
+        python3 api.py
         ```
-
-    *   **Justification:** This process is very error prone but it thereby shows the quality and benefit of automation through the User Data script
-
-*   **Decision 3: Use the User Data script to automate the instance setup   
-    *   **Choice:** This is not really a coice or a decision, just a best practice, isn't it?
-    *   **bash commands:**
-    ```
-    #rewrite bash commands to 1 script
-    ```
 
 
