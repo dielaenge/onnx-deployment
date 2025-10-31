@@ -45,7 +45,34 @@ Initial Instance Configuration
     *   **Systems Manager Session Manager:** This is a more secure, modern approach that avoids SSH key management. It will be implemented in a later "production-like" phase to demonstrate best practices.
 
 
-### 4. Decision: Instance Bootstrapping and Code Deployment
+### 4. Decision: Setting up the EC2 instance
+*   **1. Name and tags:** I created two tags, my main thought here, was to identify the deployment in general but be able to create billing analysis based on project phase:
+      1. Name: `onnx-acoustic-api-naive-EC2-deployment`
+      2. `project_phase`: `2`
+    **2. AMI:** I'm using the first suggested QuickStart AMI: Amazon Linux 2023 kernel-6.1 and I choose 64-bit, `x86_64`, architecture because I want to use a `t2.micro` instance which is free tier eligible.
+    **3. Instance family and type:** As mentioned: `t2.micro`. It is free tier eligible and has enough memory to run our dummy model.
+    **4.Instance Access:**I will create a new key pair
+      1. Key pair name: `onnx-acoustic-naive-ec2-deployment`
+      2. Key pair type: `RSA` (don't know why)
+      3. Private key file format: .pem (because it's compatible with SSH)
+      4. I'll immediately save it to a hidden folder outside the project like `~/.ssh/`
+    **5. Networking:** 
+      1. I'll choose the default vpc which has a CIDR of `172.31.0.0/16`
+      2. I'll name the security group onnx-acoustic-sg
+      3. I'll create two inbound sg rules:
+        1. SSH Access 
+        - Type: SSH
+        - Source: [My IP]
+        - Protocol: TCP
+        - Port: 22
+        - Description: SSH for admin desktop
+        2. HTTP Access
+        - Type: Custom TCP
+        - Source: 0.0.0.0/0
+        - Protocol: TCP
+        - Port: 8000 (as defined in our uvicorn.run() command)
+
+### 5. Decision: Instance Bootstrapping and Code Deployment
 
 **Date:** 2023-10-29
 
@@ -83,4 +110,8 @@ We will first do this manually via SSH to experience the repetitiveness and erro
         python3 api.py
         ```
 
+*   **Decision 3: Setting up the AL 2023 server**
+    *   **Choice:** Setting up the server instance required me to switch from my local arm64 platform to a well supported official Amzaon Linux AMI. Setting it up I learned that MacOS systems has the FFmpeg multimedia framework preinstalled but athe AL2023 instance does not, so my app crashed on the EC2 instance.
+    Looking for a solution, I could have used a preconfigured AMI which comes with the framework preinstalled or I could search for another solution which I found when searching for `Install ffmpeg on Amazon Linux 2023 AMI` on [GitHub Gist](https://gist.github.com/willmasters/382fe6caba44a4345a3de95d98d3aae5)
+    
 
