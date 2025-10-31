@@ -3,7 +3,7 @@ fastapi
 uvicorn
 python-multipart
 
-# ML and audio processing
+# Machine Learning and audio processing
 onnxruntime
 numpy
 librosa
