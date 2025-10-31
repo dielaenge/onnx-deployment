@@ -53,8 +53,14 @@ def preprocess_from_bytes(audio_bytes: bytes) -> np.ndarray:
     """Load audio from raw bytes / API upload and preprocess it."""
     # prepare the bytes for being read by soundfile via io.BytesIO
     audio_buffer = io.BytesIO(audio_bytes)
-    # use soundfile for reading bytes from API (accepts many formats, like mp3, wav, flac)
-    audio_data, sr_native = sf.read(audio_buffer)
+    # use librosa.load() (instead of sf.read()) for reading bytes from API (accepts many formats, like mp3, wav, flac)
+    audio_data, _ = librosa.load(audio_buffer, sr=TARGET_SR, mono=True) #instead of using sf.read, we use librosa.load() which won't crash with different file types but requires FFmpeg
 
-    # reuse core logic from _apply_preprocessing
-    return _apply_preprocessing(audio_data, sr_native)
+    # ensure datatype
+    if audio_data.dtype != np.float32:
+        audio_data = audio_data.astype(np.float32)
+
+    #adjust shape for onnx runtime from (N,) to (1,N)
+    audio_data_batched = np.expand_dims(audio_data, axis=0)
+
+    return audio_data_batched
