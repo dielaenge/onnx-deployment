@@ -33,7 +33,7 @@ def health_check():
         "model_loaded": processor is not None
         }
 
-@app.post("/acou-vec-v0-1/generate")
+@app.post("/acou-vec/generate")
 async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
     
     if processor is None:
