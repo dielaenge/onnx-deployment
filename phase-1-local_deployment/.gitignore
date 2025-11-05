@@ -1,0 +1,41 @@
+# --- Python Virtual Environments ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- Python Cache & Compiled Files ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# --- Dependency & Build Artifacts ---
+*.egg-info/
+dist/
+build/
+wheels/
+pip-wheel-metadata/
+.pytest_cache/
+.tox/
+.nox/
+
+# --- IDE & Editor Folders ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- OS-specific Files ---
+.DS_Store
+Thumbs.db
+
+# --- Project Specific Artifacts ---
+# NOTE: Add outputs your app generates that shouldn't be in Git
+acoustic_vector.json
+test_audio.*
+docs/notes.md
+create_dummy_model.py
+docs/LLM-comments_acoustic_processor.py
+docs/pnotes.md
+temp/
