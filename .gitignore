@@ -34,7 +34,7 @@ Thumbs.db
 # NOTE: Add outputs your app generates that shouldn't be in Git
 acoustic_vector.json
 test_audio.*
-docs/notes.md
+notes*.md
 create_dummy_model.py
 docs/LLM-comments_acoustic_processor.py
 docs/pnotes.md
