@@ -5,7 +5,7 @@ import json
 import logging
 
 from src.model_processor import AcousticModelProcessor
-from src.audio_processor import preprocess_from_bytes, TARGET_SR
+from src.audio_processor import transform_audio_to_spectogram, TARGET_SR
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -52,16 +52,16 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
 
     # 3. Preprocess audio input using modular function from audio_processor.py
     try:
-        preprocessed_audio = preprocess_from_bytes(contents)
+        audio_spec = transform_audio_to_spectogram(contents)
     except Exception as e:
         logger.error("Audio preprocessing failed for %s: %s", audio_file.filename, e)
         raise HTTPException(status_code=400, detail=f"Audio preprocessing failed: {e}")
     
-    logger.info("Preprocessed audio shape: %s", preprocessed_audio.shape)
+    logger.info("Preprocessed audio shape: %s", audio_spec.shape)
 
     # 4.
     start_time = time.perf_counter()
-    vector = processor.generate_vector(preprocessed_audio)
+    vector = processor.generate_vector(audio_spec)
     end_time = time.perf_counter()
 
     processing_time_ms = (end_time - start_time) * 1000
@@ -70,7 +70,7 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
 
     return {
         "filename" : audio_file.filename,
-        "input_samples" : preprocessed_audio.shape[1],
+        "input_samples" : audio_spec.shape[1],
         "vector_shape" : list(vector.shape), #why list?
         "acoustic_vector": vector.flatten().tolist(), #convert NumPy array to list for JSON // why flatten?
         "preprocessing_time_ms": processing_time_ms
