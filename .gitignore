@@ -1,6 +1,7 @@
 # --- Python Virtual Environments ---
 .venv/
 venv/
+venv_py313
 env/
 ENV/
 
@@ -37,3 +38,4 @@ test_audio.*
 create_dummy_model.py
 docs/LLM-comments_acoustic_processor.py
 temp/
+phase-3-proper-infra/test_imports.py
