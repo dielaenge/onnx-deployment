@@ -10,7 +10,7 @@ from soundfile import read, write
 from librosa import resample, mel_frequencies
 from librosa.feature import melspectrogram
 
-from src.util.files import get_file_list
+from src.BAPE_src.files import get_file_list
 import matplotlib.pyplot as plt
 
 
