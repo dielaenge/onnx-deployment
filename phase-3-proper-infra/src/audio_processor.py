@@ -1,66 +1,97 @@
 import numpy as np
 import librosa
-import soundfile as sf
 import io
+import torch
+from torch import Tensor
+from librosa.feature import melspectrogram
+
 
 TARGET_SR = 16000 # target sample rate – placeholder value but a common one
 
-# --- Prepare data for model input ---
+# --- Preprocessing class `MelSpectrogram` copied from [BAPE repository: bape/src/util/signals.py](https://github.com/philipp-goetz/bape/blob/7988f939d1c69301e31d322fecbbaa2a031ef3e1/src/util/signals.py) and adapted (see comments) for deployment---
 
-def _apply_preprocessing(audio_data: np.ndarray, sr_native: int) -> np.ndarray: # leading underscore for def indicates function is intended for internal use within a module and should not be considered part of the public API
-    """
-    Core function to preprocess audio: resample, ensure mono, ensure datatype and adjust shape for ONNX model.
-    Assuming audio_data is loadaed (either from disk or memory buffer).
-    """
-    # 1. Resample if necessary
-    if sr_native != TARGET_SR:
-        audio_data = librosa.resample(audio_data, orig_sr=sr_native, target_sr=TARGET_SR)
-
-    # 2. Ensure Mono
-    if audio_data.ndim == 2:
-        audio_data = audio_data.mean(axis=1)
+class MelSpectrogram:
+    """Spectogram with a mel frequency scale"""
+    def __init__(
+        self, 
+        sr: float = 16000.0, 
+        n_fft: int = 64, 
+        hop_size: int = 16,
+        n_mels: int = 17, 
+        fmin: float = 100.0, 
+        fmax: float = 8000,
+        power: float = 2.0, 
+        log_mag: bool = False, 
+        # c_mag: Optional[float] = None, (not used for SpeechEncoder model)
+        trunc: int | None = None,
+) -> None:
+        self.sr, self.n_fft, self.hop_size, self.n_mels = sr, n_fft, hop_size, n_mels
+        self.fmin, self.fmax, self.power, self.log_mag = fmin, fmax, power, log_mag
+        self.trunc = trunc
+        # self.freqs = mel_frequencies(n_mels=n_mels, fmin=fmin, fmax=fmax) #not used in the __call_ function
     
-    # 3. Ensure dtype = float32
-    if audio_data.dtype != np.float32:
-        audio_data = audio_data.astype(np.float32)
+    def __call__(self, input_signal: np.ndarray) -> np.ndarray:
+        
+        # the following check is redundant as the transform_audio_to_spectogram function we define further down always passes NumPy arrays from librosa.load()
+        #if isinstance(input_signal, Tensor):
+        #    input_signal = input_signal.numpy()
 
-    # 4. Adjust shape
-    audio_data_batched = np.expand_dims(audio_data, axis=0)
+        # From here until `return` statement code is copied from BAPE repo
+        spec = melspectrogram(
+            y=input_signal, sr=self.sr, n_fft=self.n_fft, hop_length=self.hop_size,
+            n_mels=self.n_mels, fmin=self.fmin, fmax=self.fmax, power=1.0,
+        )
+        spec = Tensor(spec)
+        spec /= spec.max()
+        spec = spec.pow(self.power)
+        if self.log_mag:
+            spec = 10 * torch.log10(spec + 1e-12)
+        if self.trunc is not None:
+            nbins, length = spec.size()
+            if length < self.trunc:
+                spec = torch.cat(
+                    (spec, torch.zeros((nbins, self.trunc - length))), dim=-1
+                )
+            else:
+                spec = spec[:, : self.trunc]
 
-    return audio_data_batched
+        # Edited to be returned as a NumPy array for ONNX Runtime
+        return spec.numpy()
+    
+# --- Create an instance of the MelSpectogram class ---
+    
+melspec_preprocessor = MelSpectrogram(
+    sr=16000, 
+    n_fft=64, 
+    hop_size=32, 
+    n_mels=16, 
+    fmin=20, 
+    fmax=8000, 
+    power=2.0, 
+    log_mag=True, 
+    trunc=2000
+)
 
-# --- Function for CLI/Disk Input ---
-def preprocess_from_path(audio_path: str) -> np.ndarray:
-    """Loads audio from local disk and preprocesses it for model input."""
-    # use librosa for local audio file handling, resampling and ensuring mono
-    audio_data, current_sr = librosa.load(
-        audio_path, 
-        sr=TARGET_SR, 
-        mono=True
-    )
-
-    # 3. Ensure dtype = float 32 // librosa handled step 1 and 2 already
-    if audio_data.dtype != np.float32:
-        audio_data = audio_data.astype(np.float32)
-
-    # 4. Adjust shape for ONNX model input; from (N,) to (1,N)
-    audio_data_batched =np.expand_dims(audio_data, axis=0)
-
-    return audio_data_batched
-
-# --- Function for API/Byte Input ---
-def preprocess_from_bytes(audio_bytes: bytes) -> np.ndarray:
-    """Load audio from raw bytes / API upload and preprocess it."""
-    # prepare the bytes for being read by soundfile via io.BytesIO
+def transform_audio_to_spectogram(audio_bytes): #audio_bytes describe a path
+    """Loads raw audio bytes and converts them to a 4D spectogram tensor the ONNX model expects."""
     audio_buffer = io.BytesIO(audio_bytes)
-    # use librosa.load() (instead of sf.read()) for reading bytes from API (accepts many formats, like mp3, wav, flac)
-    audio_data, _ = librosa.load(audio_buffer, sr=TARGET_SR, mono=True) #instead of using sf.read, we use librosa.load() which won't crash with different file types but requires FFmpeg
+    audio_data, _ = librosa.load(audio_buffer, sr=TARGET_SR, mono=True, dtype=np.float32) #librosa.load returns an np.ndarray / audio time series, here audio_data, and a sample rate `_`, ensure datatype is float32
+    
+    #audio_data has to be adjusted for onnx runtime from (N,) to (1, 1, 16, 2000), this happens in 3 steps
+    
+    # Step 1. Create 2D Mel Spectogram; shape -> (16, 2000)
+    spectogram_2d = melspec_preprocessor(audio_data) # returns spectogram using height of `n_mels`` and width of `trunc`
+    print(f"Shape of spectogram_2d after shape preprocessing step 1: {spectogram_2d.shape}")
 
-    # ensure datatype
-    if audio_data.dtype != np.float32:
-        audio_data = audio_data.astype(np.float32)
-
-    #adjust shape for onnx runtime from (N,) to (1,N)
-    audio_data_batched = np.expand_dims(audio_data, axis=0)
-
-    return audio_data_batched
+    # Step 2. Add batch size to the tensor at position 0; shape -> (1, 16, 2000)
+    spectogram_3d = np.expand_dims(spectogram_2d, axis=0)
+    print(f"Shape of spectogram_3d after shape preprocessing step 2: {spectogram_3d.shape}")
+    
+    # Step 3. Add dimensions for channels at position 1; shape -> (1, 1, 16, 2000)
+    spectogram_4d = np.expand_dims(spectogram_3d, axis=1)
+    print(f"Shape of spectogram_4d after shape preprocessing step 3: {spectogram_4d.shape}")
+    
+    # Return the final tensor
+    # print(f"Data type is:{spectogram_4d.dtype}")
+    return spectogram_4d
+    

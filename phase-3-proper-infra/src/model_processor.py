@@ -3,54 +3,29 @@ import numpy as np
 import logging
 
 logger = logging.getLogger(__name__)
+providers=["CPUExecutionProvider"]
 
 # --- Model harness wrapping the model in the contextual logic: loading onnx model, preparing input, calling inference session and interpreting the output ---
 
 class AcousticModelProcessor:
     def __init__(self, onnx_path: str): # initialize instance taking in model from onnx_path
-        self.sess = rt.InferenceSession(onnx_path) #initializes Inference Session to make predicitions using onnx runtime and taking in model from onnx_path
+        self.sess = rt.InferenceSession(onnx_path, providers=providers) #initializes Inference Session for predicitions using onnx runtime and taking in model from onnx_path; explicitly stating default providers to emphasize intention
 
         self.input_name = self.sess.get_inputs()[0].name #returns a list of input objects (each an onnxruntime.NodeArg). Each of those has a .name attribute — a string matching the input tensor name defined when the model was exported.
-        self.output_name = self.sess.get_outputs()[0].name # same as above but for output tensorse
+
+        self.output_names = [output.name for output in self.sess.get_outputs()] # With the BAPE model, there are 2 output features to store => store the name for each feature in an array
         
         logger.info("Model initialized successfully.")
-        logger.info("Input Name: %s, Output Name: %s", self.input_name, self.output_name)
+        logger.info("Input Name: %s, Output Names: %s", self.input_name, self.output_names)
 
-    def generate_vector(self, preprocessed_audio: np.ndarray) -> np.ndarray: #after model and inference session are ready can return their inputs and outputs, a function to define the vector is set up which takes in the preprocessed audio from the model
-        """Runs the ONNX inference session."""
+    def generate_vector(self, preprocessed_spectogram: np.ndarray) -> dict: #after model and inference session are initialized, a function to define the vector is set up which takes in the preprocessed audio from the model
+        """Runs the ONNX inference session and returns a dictionary of all model outputs."""
 
-        input_feed = {self.input_name: preprocessed_audio} #creates a dictionary called input_feed required to run the InferenceSession
-        result = self.sess.run([self.output_name], input_feed) #compute the vector, will be a list with one NumPy array element per output name provided (here only one output name)
-
-        return result[0] # our batch has a size of 1, therefor returning the first (and only) vector is enough
-
-# --- Test Function: Bring together the components // Inactive bc cli.py will do testing/running ---
-
-#def test_processor(onnx_model_path: str, audio_file_path: str):
-#    try :
-#        # load the model harness
-#        processor = AcousticModelProcessor(onnx_model_path)
-#
-#        #prepare the audio
-#        preprocessed_audio = load_and_preprocess_audio(audio_file_path)
-#
-#        #run inference
-#        acoustic_vector = processor.generate_vector(preprocessed_audio)
-#
-#        print("-" * 30) # line
-#        print("Inference successful!")
-#        print(f"Output vector shape: {acoustic_vector.shape}")
-#        print(f"Data type: {acoustic_vector.dtype}")
-#        print(f"First 5 elements: {acoustic_vector[0][:5]}")
-#
-#    except Exception as e :
-#        print(f"\nError running inference: {e}")
-#        print("If trying with real model, check input shape and data type requirements!")
-#
-#if __name__ == "__main__":
-## the (dummy) model has to be exported first
-## also: a sample audio file is required
-#    DUMMY_MODEL = "dummy_acoustic_model.onnx"
-#    SAMPLE_AUDIO = "test_audio.wav"
-#
-#    test_processor(DUMMY_MODEL, SAMPLE_AUDIO)
+        input_feed = {self.input_name: preprocessed_spectogram} #creates a dictionary called input_feed required to run the InferenceSession
+        all_outputs = self.sess.run(self.output_names, input_feed) #the BAPE model generates a set of outputs from a single input: one `latent` vector of shape `(1, 1024)` and `latent_weights` vector of shape `(1, 256)`
+        results = {
+            name: array for name, 
+            array in zip(self.output_names, all_outputs)
+                         }
+        
+        return results
