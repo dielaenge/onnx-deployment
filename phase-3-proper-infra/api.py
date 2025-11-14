@@ -3,9 +3,10 @@ import uvicorn
 import time
 import json
 import logging
+import uuid
 
 from src.model_processor import AcousticModelProcessor
-from src.audio_processor import transform_audio_to_spectogram, TARGET_SR
+from src.audio_processor import transform_audio_to_spectogram
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -14,10 +15,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("API")
 
-app = FastAPI(title="Acoustic Vector Generator API")
+app = FastAPI(title="BAPE API")
 
 # --- Model init (happens once at server startup) ---
-MODEL_PATH = "dummy_acoustic_model.onnx"
+MODEL_PATH = "speech_encoder.onnx"
 processor = None
 try:
     processor = AcousticModelProcessor(MODEL_PATH)
@@ -59,21 +60,43 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
     
     logger.info("Preprocessed audio shape: %s", audio_spec.shape)
 
-    # 4.
+    # 4. RUn inference and get results
     start_time = time.perf_counter()
-    vector = processor.generate_vector(audio_spec)
+    model_outputs = processor.generate_vector(audio_spec)
     end_time = time.perf_counter()
 
     processing_time_ms = (end_time - start_time) * 1000
 
     logger.info("Inference complete for %s. Time: %s.3f ms", audio_file.filename, processing_time_ms)
 
+    # 5. API respone (improved with BAPE integration)
+    latent_vector = model_outputs['latent']
+    attention_weights = model_outputs['latent_weights']
+
     return {
-        "filename" : audio_file.filename,
-        "input_samples" : audio_spec.shape[1],
-        "vector_shape" : list(vector.shape), #why list?
-        "acoustic_vector": vector.flatten().tolist(), #convert NumPy array to list for JSON // why flatten?
-        "preprocessing_time_ms": processing_time_ms
+        "request_metadata": {
+            #"request_id": str(uuid.uuid4()),
+            "filename": audio_file.filename,
+            "processing_time_ms": round(processing_time_ms, 3)
+        },
+
+        "model_metadata": {
+            "model_name": "BAPE SpeechEncoder",
+            "onnx_input_shape": list(audio_spec.shape)
+        },
+
+        "inference_results": {
+            
+            "estimated_parameters": {
+                "shape": list(latent_vector.shape),
+                "values": latent_vector.flatten().tolist()
+            },
+        
+            "attention_weights": {
+                "shape": list(attention_weights.shape),
+                "values": attention_weights.flatten().tolist()
+            }
+        }
     }
 
 if __name__ == "__main__":
