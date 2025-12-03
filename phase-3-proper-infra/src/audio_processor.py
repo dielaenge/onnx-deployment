@@ -11,7 +11,7 @@ TARGET_SR = 16000 # target sample rate – placeholder value but a common one
 # --- Preprocessing class `MelSpectrogram` copied from [BAPE repository: bape/src/util/signals.py](https://github.com/philipp-goetz/bape/blob/7988f939d1c69301e31d322fecbbaa2a031ef3e1/src/util/signals.py) and adapted (see comments) for deployment---
 
 class MelSpectrogram:
-    """Spectogram with a mel frequency scale"""
+    """Spectrogram with a mel frequency scale"""
     def __init__(
         self, 
         sr: float = 16000.0, 
@@ -72,7 +72,7 @@ melspec_preprocessor = MelSpectrogram(
     trunc=2000
 )
 
-def transform_audio_to_spectogram(audio_bytes): #audio_bytes describe a path
+def transform_audio_to_spectrogram(audio_bytes): #audio_bytes describe a path
     """Loads raw audio bytes and converts them to a 4D spectogram tensor the ONNX model expects."""
     audio_buffer = io.BytesIO(audio_bytes)
     audio_data, _ = librosa.load(audio_buffer, sr=TARGET_SR, mono=True, dtype=np.float32) #librosa.load returns an np.ndarray / audio time series, here audio_data, and a sample rate `_`, ensure datatype is float32
@@ -80,18 +80,18 @@ def transform_audio_to_spectogram(audio_bytes): #audio_bytes describe a path
     #audio_data has to be adjusted for onnx runtime from (N,) to (1, 1, 16, 2000), this happens in 3 steps
     
     # Step 1. Create 2D Mel Spectogram; shape -> (16, 2000)
-    spectogram_2d = melspec_preprocessor(audio_data) # returns spectogram using height of `n_mels`` and width of `trunc`
-    print(f"Shape of spectogram_2d after shape preprocessing step 1: {spectogram_2d.shape}")
+    spectrogram_2d = melspec_preprocessor(audio_data) # returns spectogram using height of `n_mels`` and width of `trunc`
+    print(f"Shape of spectogram_2d after shape preprocessing step 1: {spectrogram_2d.shape}")
 
     # Step 2. Add batch size to the tensor at position 0; shape -> (1, 16, 2000)
-    spectogram_3d = np.expand_dims(spectogram_2d, axis=0)
-    print(f"Shape of spectogram_3d after shape preprocessing step 2: {spectogram_3d.shape}")
+    spectrogram_3d = np.expand_dims(spectrogram_2d, axis=0)
+    print(f"Shape of spectogram_3d after shape preprocessing step 2: {spectrogram_3d.shape}")
     
     # Step 3. Add dimensions for channels at position 1; shape -> (1, 1, 16, 2000)
-    spectogram_4d = np.expand_dims(spectogram_3d, axis=1)
-    print(f"Shape of spectogram_4d after shape preprocessing step 3: {spectogram_4d.shape}")
+    spectrogram_4d = np.expand_dims(spectrogram_3d, axis=1)
+    print(f"Shape of spectogram_4d after shape preprocessing step 3: {spectrogram_4d.shape}")
     
     # Return the final tensor
     # print(f"Data type is:{spectogram_4d.dtype}")
-    return spectogram_4d
+    return spectrogram_4d
     

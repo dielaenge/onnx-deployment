@@ -1,0 +1,3 @@
+[submodule "phase-3-proper-infra/src/bape"]
+	path = phase-3-proper-infra/src/bape
+	url = git@github.com:philipp-goetz/bape.git
