@@ -38,4 +38,5 @@ test_audio.*
 create_dummy_model.py
 docs/LLM-comments_acoustic_processor.py
 temp/
-phase-3-proper-infra/test_imports.py
+phase-3-proper-infra/src/bape/
+phase-3-proper-infra/src/BAPE_src/
