@@ -44,7 +44,7 @@ Thumbs.db
 *.tar.gz
 ffmpeg*
 *.tgz
-# for now I allow onnx files because they are >15MB in size
+# for now I allow onnx files because they are < 15MB in size
 # *.onnx
 
 # --- Project Specific Artifacts ---
