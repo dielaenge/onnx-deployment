@@ -4,9 +4,10 @@ import time
 import json
 import logging
 import uuid
+from memory_profiler import memory_usage
 
 from src.model_processor import AcousticModelProcessor
-from src.audio_processor import transform_audio_to_spectogram
+from src.audio_processor import transform_audio_to_spectrogram
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -18,7 +19,7 @@ logger = logging.getLogger("API")
 app = FastAPI(title="BAPE API")
 
 # --- Model init (happens once at server startup) ---
-MODEL_PATH = "speech_encoder.onnx"
+MODEL_PATH = "onnx/super_param_estimator.onnx"
 processor = None
 try:
     processor = AcousticModelProcessor(MODEL_PATH)
@@ -53,48 +54,59 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
 
     # 3. Preprocess audio input using modular function from audio_processor.py
     try:
-        audio_spec = transform_audio_to_spectogram(contents)
+        audio_spec = transform_audio_to_spectrogram(contents)
     except Exception as e:
         logger.error("Audio preprocessing failed for %s: %s", audio_file.filename, e)
         raise HTTPException(status_code=400, detail=f"Audio preprocessing failed: {e}")
     
     logger.info("Preprocessed audio shape: %s", audio_spec.shape)
 
-    # 4. RUn inference and get results
+    # 4. Run inference and get results
     start_time = time.perf_counter()
-    model_outputs = processor.generate_vector(audio_spec)
+    mem_profile, model_outputs = memory_usage((processor.generate_vector, (audio_spec,)),
+    retval=True,
+    interval=0.1)
     end_time = time.perf_counter()
 
     processing_time_ms = (end_time - start_time) * 1000
-
+    max_mem_profile = round(max(mem_profile))
     logger.info("Inference complete for %s. Time: %s.3f ms", audio_file.filename, processing_time_ms)
 
     # 5. API respone (improved with BAPE integration)
-    latent_vector = model_outputs['latent']
-    attention_weights = model_outputs['latent_weights']
+    latent_vector = model_outputs['latent_vector']
+    estimated_params = model_outputs['estimated_params']
+    quantiles  = model_outputs['quantiles']
 
     return {
         "request_metadata": {
             #"request_id": str(uuid.uuid4()),
             "filename": audio_file.filename,
-            "processing_time_ms": round(processing_time_ms, 3)
+            "processing_time_ms": round(processing_time_ms, 3),
+            "max_memory_usage_mb": max_mem_profile 
         },
 
         "model_metadata": {
-            "model_name": "BAPE SpeechEncoder",
+            "model_path": MODEL_PATH,
             "onnx_input_shape": list(audio_spec.shape)
         },
 
         "inference_results": {
-            
-            "estimated_parameters": {
+
+            "acoustic_fingerprint" : {
                 "shape": list(latent_vector.shape),
-                "values": latent_vector.flatten().tolist()
+                "values": latent_vector.flatten().tolist()[:10],
+                "comment": "Only first 10 values of vector for better readability"
+
             },
-        
-            "attention_weights": {
-                "shape": list(attention_weights.shape),
-                "values": attention_weights.flatten().tolist()
+
+            "estimated_parameters": {
+                "shape": list(estimated_params.shape),
+                "values": estimated_params.flatten().tolist()
+            },
+
+            "quantiles": {
+                "shape": list(quantiles.shape),
+                "values": quantiles.flatten().tolist()
             }
         }
     }

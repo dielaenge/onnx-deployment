@@ -1,10 +1,35 @@
-# README: Multi-stage ML-Ops
+# Building an ML-OPs pipeline in different stages of elaboration for the BAPE Project
 
-### Intro
+## **Status:** 🚧 Active Development (Phase 3: Security & Networking)
 
-- What is this project about?
-- What does it do?
-- How do I use it?
+### Current Objective
+Transitioning from a manual EC2 deployment (Phase 2) to a scripted, secure VPC architecture using AWS CLI.
+
+### Architecture State
+- [x] Custom VPC Design (10.16.0.0/16)
+- [x] Public/Private Subnet Isolation
+- [x] NAT Gateway implementation for private outbound traffic
+- [ ] Application Load Balancer (In Progress - blocked on SSL config)
+- [ ] HTTPS/Microphone Secure Context (Upcoming)
+
+### Key Documentation
+* currently in local development, commit to public repo is next 
+
+---
+
+## General project information (tbc)
+
+### Problem:
+Scaling out the inference architecture for a Fraunhofer-backed research model in incremental stages, transforming a local Python script into a globally accessible, cost-optimized Serverless API. 
+
+Stages:
+
+1. local onnx deployment
+2. manual cloud deployment: deployed on EC2 instance, security groups, SSH instance access
+3. proper cloud deployment
+4. IaC/Serverless
+5. Containerize?
+6. Advanced output, analytics, logging, visualization
 
 ### **Phase 1: Local deployment with onnx runtime**
 - local deployment
@@ -18,9 +43,62 @@
 ### **Phase 3: Production-Ready Cloud Deployment**
 *In this phase, the goal was to transition from the naive manual deployment of Phase 2 to a scalable, secure, and maintainable cloud architecture. This involved designing a custom VPC, isolating services in private subnets, and managing ingress traffic with an Application Load Balancer.*
 
-##### *Detour: Integrating a Real-World ML Model*
+#### Phase 3 - Target Architecture
 
-At the start of this phase I was invited to the GitHub repo of the real world PyTorch model we are deploying in this project and were substituting with a dummy model until here. 
+```mermaid
+
+graph TB
+  Internet([Internet Traffic])  
+    
+    subgraph VPC["VPC - 10.16.0.0/16"]
+      
+      IGW(🛜 Internet Gateway)
+
+      subgraph PrivateA["🔒 phase3-private-subnet-a - 10.16.1.0/24"]
+        EC2_2[EC2 Instance 2]
+      end
+     
+      subgraph PublicB["🔒 phase3-public-subnet-b - 10.16.2.0/24"]
+        ALB1[⚖️ Application Load Balancer]
+        NAT1[ NAT Gateway]
+      end
+    
+      subgraph PublicA["📡 phase3-public-subnet-a - 10.16.0.0/24"]
+        ALB2[⚖️ Application Load Balancer]
+        NAT2[ NAT Gateway]
+      end
+
+      RT_Public[📋 Route Table: Public<br/>0.0.0.0/0 → IGW]
+      RT_Private[📋 Route Table: Private<br/>0.0.0.0/0 → NAT]
+    
+    end
+
+    %% Inbound Traffic
+    Internet -->|HTTPS:443| IGW
+    IGW --> ALB1
+    IGW --> ALB2
+    ALB1 --> |HealthCheck/<br/>LoadBalance|EC2_2
+    ALB2 --> |HealthCheck/<br/>LoadBalance|EC2_2
+
+    %% Outbound Traffic
+    EC2_2 -.->|Outbound<br/>apt update, etc.|NAT1
+    EC2_2 -.->|Outbound<br/>apt update, etc.|NAT2
+    NAT1 -.-> IGW
+    NAT2 -.-> IGW
+
+    %% Route Table Associations
+    RT_Public -.->|Associated| PublicA
+    RT_Public -.->|Associated| PublicB
+    RT_Private -.->|Associated| PrivateA
+
+    %% Styling
+
+
+```
+
+### *Detour: Integrating the real BAPE Model*
+
+At the start of phase 3 I was invited to the GitHub repo of the real world PyTorch model we are deploying in this project and were substituting with a dummy model until here. 
 This required a deep dive into the BAPE repository`s "code archaeology" to reverse-engineer the model's architecture and data preprocessing requirements from a complex, unfamiliar codebase.
 
 **The process involved:**
@@ -31,9 +109,11 @@ This required a deep dive into the BAPE repository`s "code archaeology" to rever
 
 The successful result was a self-contained `exporter.py` script that produces a validated `speech_encoder.onnx` model, ready for deployment.
 
-**[➡️ The full, detailed story of the model export process in my Decision Log.](./docs/DECISION_LOG.md#x-embedding-bape)**
+**[➡️ The full, detailed story of the model export process in my Decision Log(Coming soon).](./docs/DECISION_LOG.md#x-embedding-bape)**
 
-## Target Architecture
+
+
+--> 2 Public Subnets for 2 ALB nodes (ALB HA) while having only 1 EC2 instance in 1 private subnet --> decision for dev purposes, doesn't make sense but is not possible cheaper (AWS requires HA for ALBs)
 
 [ONNX model arch exported with Neutron.app]
 

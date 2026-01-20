@@ -4,6 +4,13 @@ venv/
 venv_py313
 env/
 ENV/
+venv.nosync/
+
+# --- AWS and Local Config ---
+.envrc
+.aws/
+aws_config
+credentials
 
 # --- Python Cache & Compiled Files ---
 __pycache__/
@@ -31,12 +38,23 @@ pip-wheel-metadata/
 .DS_Store
 Thumbs.db
 
+# --- big artifacts ---
+*.zip
+*.tar.xz
+*.tar.gz
+ffmpeg*
+*.tgz
+# for now I allow onnx files because they are >15MB in size
+# *.onnx
+
 # --- Project Specific Artifacts ---
 .local/
+arch/
 acoustic_vector.json
+phase-3-proper-infra/src/BAPE_src/results/
 test_audio.*
 create_dummy_model.py
 docs/LLM-comments_acoustic_processor.py
 temp/
 phase-3-proper-infra/src/bape/
-phase-3-proper-infra/src/BAPE_src/
+aws/
