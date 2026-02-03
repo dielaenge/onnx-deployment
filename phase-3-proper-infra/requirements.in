@@ -15,3 +15,6 @@ soundfile==0.13.1
 pyyaml
 coloredlogs==15.0.1
 humanfriendly==10.0
+
+# Frontend
+aiofiles
