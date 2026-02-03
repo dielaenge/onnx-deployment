@@ -527,21 +527,22 @@ The possibility of our app leaking microphone signals of interested users would 
 
 #### …Resource Creation continued…
 
-##### Creating the NAT-Gateway
+
 ```zsh
+##### Allocating elastic IP
 aws ec2 allocate-address \
 --domain vpc \
 --tag-specifications "ResourceType=elastic-ip, Tags=[{Key=Name,Value=phase3-eip}]" \
 --profile "dev" # \
 # --region "eu-central-1" already defined in profile
 
+##### Creating the NAT-Gateway
 aws ec2 create-nat-gateway \
 --subnet-id # retrieve from 'X. Resources' / Public Subnet A\
 --allocation-id # retrieve from 'X. Resources' / phase3-eip \
---tag-specifications "ResourceType=internet-gateway,Tags=[{Key=Name,Value=phase3-natgw}]" \
+--tag-specifications "ResourceType=natgateway,Tags=[{Key=Name,Value=phase3-natgw}]" \
 --profile "dev"
 ```
-
 
 Tell the private route table to send all traffic to the NAT Gateway
 ```zsh
@@ -771,7 +772,7 @@ I also have a public route directing all traffic to the IGW but since these are 
 aws ec2 replace-route \
 --route-table-id # retrieve from 'X.6. Route Tables` \
 --destination-cidr-block 0.0.0.0/0 \
---gateway-id # retrieve from 'X.3. NATGW` \
+--nat-gateway-id # retrieve from 'X.3. NATGW` \
 --profile dev
 ```
 
@@ -808,12 +809,14 @@ aws ec2 authorize-security-group-ingress \
 ```
 I created the security groups as they were required for launching the EC2 instance (See"Launch EC2 instances").
 
+##### Launching the instance
+
 Now, I should be able to complete the launch command:
 
 ```zsh
 aws ec2 run-instances \
 # ami-id retrieved via 'ec2 describe-images…'
---image-id ami-029cdb80a7069a70a \ 
+--image-id ami-029cdb80a7069a70a \
 --instance-type t3.small \
 #private subnet
 --subnet-id subnet-0f8b792c550dc1f57 \
@@ -831,17 +834,21 @@ aws ec2 describe-instances --profile dev
 ```
 to get the instance ID.
 
+##### Connect to SSM
+
 With this I tried to connect to SSM without SSH
 
 ```zsh
-aws ssm start-session --target <Instance_ID> --profile dev
+aws ssm start-session --target i-04aaa7bc345a24671 --profile dev
 ```
 
-but FAILED.
+but FAILED with a `TargetNotConnected`.
 
 ##### Troubleshooting SSM Access
 
 EC2 instance in the private subnet A doesn't connect to the NATGW in the public subnet A. so I checked if the route tables are connected correctly:
+
+###### Check Routes
 
 ```zsh
 aws ec2 describe-route-tables \
@@ -888,7 +895,7 @@ In this case it returns
 
 So the first route table has no name and only a local route. This should have been our private route table but instead it defaulted to the "Main" route table > The EC2 instance is sitting in a room without a door.
 
-I force our private route table to link with the private subnet A:
+I force the private route table to link with the private subnet A:
 
 ```zsh
 aws ec2 associate-route-table \
@@ -897,13 +904,798 @@ aws ec2 associate-route-table \
 --profile dev
 ```
 
-To use the fixed routing I need to restart the instance:
+To update routing I need to restart the instance:
 
 ```zsh
 aws ec2 reboot-instances \
 --instance-ids i-04aaa7bc345a24671 \
 --profile dev
 ```
+
+Another try:
+```zsh
+aws ssm start-session --target i-04aaa7bc345a24671 --profile dev
+```
+But again, I was returned a `TargetNotConnected`.
+
+I checked `describe route-tables` again to make sure this wasn`t the cause again and it looked fine:
+```zsh
+onnx-acoustic/phase-3-proper-infra on  feat/proper-AWS-deployment [$✘!?] via 🐍 v3.13.7 (m4-mini) 
+❯ aws ec2 describe-route-tables \
+--filters "Name=vpc-id,Values=vpc-0772e7cc248fd716c" \
+--query "RouteTables[*].{ID:RouteTableId,Name:Tags[?Key=='Name']|[0].Value,Routes:Routes}" \
+--profile dev
+[
+    {
+        "ID": "rtb-0d180e4bfff0d77ee",
+        "Name": "phase3-private-route-able",
+        "Routes": [
+            {
+                "DestinationCidrBlock": "10.16.0.0/16",
+                "GatewayId": "local",
+                "Origin": "CreateRouteTable",
+                "State": "active"
+            },
+            {
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "NatGatewayId": "nat-095f0051a71bbe536",
+                "Origin": "CreateRoute",
+                "State": "active"
+            }
+        ]
+    },
+    {
+        "ID": "rtb-08d988d32de122e1c",
+        "Name": null,
+        "Routes": [
+            {
+                "DestinationCidrBlock": "10.16.0.0/16",
+                "GatewayId": "local",
+                "Origin": "CreateRouteTable",
+                "State": "active"
+            }
+        ]
+    },
+    {
+        "ID": "rtb-00dcbd16b07bf8e46",
+        "Name": "phase3-public-route-table",
+        "Routes": [
+            {
+                "DestinationCidrBlock": "10.16.0.0/16",
+                "GatewayId": "local",
+                "Origin": "CreateRouteTable",
+                "State": "active"
+            },
+            {
+                "DestinationCidrBlock": "0.0.0.0/0",
+                "GatewayId": "igw-0ca97ba8edc60bcf4",
+                "Origin": "CreateRoute",
+                "State": "active"
+            }
+        ]
+    }
+]
+```
+
+##### Check SGs
+
+Next, I checked if the egress rules of the security group could be the cause but it wasn't:
+
+```zsh
+aws ec2 describe-security-groups \
+    --filters Name=group-name,Values=phase3-sg-ec2 \
+    --query "SecurityGroups[*].IpPermissionsEgress" \
+    --profile dev
+[
+    [
+        {
+            "IpProtocol": "-1",
+            "UserIdGroupPairs": [],
+            "IpRanges": [
+                {
+                    "CidrIp": "0.0.0.0/0"
+                }
+            ],
+            "Ipv6Ranges": [],
+            "PrefixListIds": []
+        }
+    ]
+]
+```
+With our query filtering out our specific EC2 security group, only looking at egress permissions, `"IpProtocol": "-1"` tells us that it allows all protocols and `"CidrIp": "0.0.0.0/0"` that it allows all destinations. This looks fine.
+
+***Pause >> ShutDown: Terminate Instance, delete NAT Gateway, release Elastic IP***
+
+##### Check DNS settings
+
+For the trouble shooting to continue it was not necessary to immediately restart the non-free resources. Instead I wanted to check basic networking settings.
+
+*Does the IAM Role have access to the SSM?*
+
+Checking Role Permissions for `AmazonSSMManagedInstanceCore` policy:
+
+`aws iam list-attached-role-policies --role-name phase3-ec2-role --profile dev`
+
+returns
+
+```JSON
+{
+    "AttachedPolicies": [
+        {
+            "PolicyName": "AmazonSSMManagedInstanceCore",
+            "PolicyArn": "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+        }
+    ]
+}
+```
+Check.
+
+*Is DNS support enabled for the VPC?*
+
+```zsh
+aws ec2 describe-vpc-attribute --vpc-id vpc-0772e7cc248fd716c --attribute enableDnsSupport --profile dev
+```
+returns
+```JSON
+{
+    "EnableDnsSupport": {
+        "Value": true
+    },
+    "VpcId": "vpc-0772e7cc248fd716c"
+}
+```
+Check.
+
+*Are Hostnames enabled for the VPC?*
+
+`aws ec2 describe-vpc-attribute --vpc-id vpc-0772e7cc248fd716c --attribute enableDnsHostnames --profile dev`
+
+returns
+
+```JSON
+{
+    "EnableDnsHostnames": {
+        "Value": false
+    },
+    "VpcId": "vpc-0772e7cc248fd716c"
+}
+```
+This seems to cause the problem.
+Without `EnableDnsHostnames` set to true, the EC2 instance gets an IP address but no public DNS hostname.
+
+*Enabling DNS Hostnames*
+
+```zsh
+aws ec2 modify-vpc-attribute \
+--enable-dns-hostnames "{\"Value\":true}" \
+--vpc-id vpc-0772e7cc248fd716c \
+--profile dev
+```
+
+Check attribute:
+```zsh
+aws ec2 describe-vpc-attribute --vpc-id vpc-0772e7cc248fd716c --attribute enableDnsHostnames --profile dev
+```
+
+```JSON
+{
+    "EnableDnsHostnames": {
+        "Value": true
+    },
+    "VpcId": "vpc-0772e7cc248fd716c"
+}
+```
+
+Troubleshooting can be finished after retrying with non-free infrastructure relaunched.
+
+##### Restarting infra
+
+- Allocate IP (see #### …resource Creation continued…):
+`aws ec2 allocate-address…`
+
+- Create NAT GW with EIP:
+`aws ec2 create-nat-gateway`
+
+- replace exisiting route in private route table (routes to the old IP of the old NATGW):
+
+launch instance
+
+---
+At this stage, my remote repository needed an update because I was refatoring the bigger project structure and wanted to update my logs (todo: add commit!).
+
+With the updates in place I wanted to make sure my code is at the latest version:
+
+```zsh
+#from the `phase-3-proper-infra` directory:
+aws s3 cp api.py s3://onnx-deployment-phase3-artifacts-dgoossens-20250106/api.py --profile dev
+aws s3 cp requirements.txt s3://onnx-deployment-phase3-artifacts-dgoossens-20250106/requirements.txt --profile dev
+```
+
+Retrying to establish SSM connection failed again.
+Since I manually wrote the user-data.sh script, I decided to launch a plain vanilla ec2 t3.small instance without a user data script and try to establish a connection.
+
+Retrying `aws ssm start-session …` failed again.
+
+I decided to cancel out the causes and launch an instance into one of the public subnets. If this works, we know the problem is with the private subnet, its route table and the NAT-Gateway. If it fails my problem must stem from the IAM role or the VPC itself (although I checked DNS settings).
+
+Terminate the instance in the private subnet:
+
+`aws ec2 terminate-instances --instance-ids…`
+
+Launch a debug instance in Public Subnet A with an explicit request for a public IP:
+
+```zsh
+aws ec2 run-instances \
+    --image-id ami-029cdb80a7069a70a \
+    --instance-type t3.small \
+    # public subnet A
+    --subnet-id subnet-0e9fc06ce108ce4ea \
+    # EC2 SG
+    --security-group-ids sg-0eefa1fcc6557d2f8 \
+    --iam-instance-profile Name=phase3-ec2-profile \
+    #give the instance a public IP
+    --associate-public-ip-address \
+    --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=phase3-public-debug}]' \
+    --profile dev
+```
+
+Also returns the Image ID `i-07cbf883226beb48a`.
+
+Retry to start an SSM Session on this instance:
+
+`aws ssm start-session --target i-…` again returns `TargetNotConnected`.
+
+So the problem must be caused by faulty authentication.
+`aws iam get-role` showed the correct allowed access for EC2
+`aws get-instance-profile …` showed the role is correctly attached to the instance profile
+
+Also the Route Tables have the correct routes, there are no custom NACLs denying any of the traffic and the IGW is correctly attached to the VPC.
+
+##### Debug Shell Script `debug_ssm.sh` on the EC2 instance
+
+I want to see into the logs of the EC2 instance and 
+- create a script to 
+- restart the ssm-agent on the instance
+- dump the logs into the system console
+
+See `debug_ssm.sh`.
+
+##### Relaunch debug instance with debug script
+
+```zsh
+aws ec2 run-instances \                                                              
+    --image-id ami-029cdb80a7069a70a \
+    --instance-type t3.small \
+    --subnet-id subnet-0e9fc06ce108ce4ea \
+    --security-group-ids sg-0eefa1fcc6557d2f8 \
+    --iam-instance-profile Name=phase3-ec2-profile \
+    --associate-public-ip-address \
+    --user-data file://debug_ssm.sh \
+    --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=phase3-public-debug-script}]' \
+    --profile dev
+```
+
+Return includes instance ID: `i-03c88e33d895e1659`.
+
+I'm waiting a couple of minutes for the instance to boot, restart SSM Agent, fail at it and print logs.
+
+```zsh
+aws ec2 get-console-output --instance-id i-03c88e33d895e1659 --profile dev --output text
+```
+
+This try didn't return any SMM logs at all, so I ran another debug script, debug_ssm_2.sh, which
+- tries to establish an internet connection via curl
+- checks SSM status
+- get the 50 last lines of logs from SSM
+
+The connection worked as planned but the status returned `Unit amazon-ssm-agent.service could not be found.`, so SSM didn't seem to be preinstalled as assumed.
+
+##### FIX: install amazon-ssm-agent on EC2 instance and Plugin locally
+I corrected my original `user-data.sh` script to `dnf install amazon-ssm-agent`, `systemctl enable` and `start`.
+
+Then I relaunched the instance.
+
+Trying to satrt the ssm session now offered another piece of infomration:
+
+```zsh
+aws ssm start-session --target i-03c2bba49961b3e6f --profile dev
+
+SessionManagerPlugin is not found. Please refer to SessionManager Documentation here: http://docs.aws.amazon.com/console/systems-manager/session-manager-plugin-not-found
+```
+
+So I needed to download the SSM plugin installer on my machine
+```zsh
+onnx-acoustic on  feat/proper-AWS-deployment [$!?] 
+❯ curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/mac_arm64/session-manager-plugin.pkg" -o "session-manager-plugin.pkg"
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100 3773k  100 3773k    0     0  2023k      0  0:00:01  0:00:01 --:--:-- 2023k
+
+onnx-acoustic on  feat/proper-AWS-deployment [$!?] 
+❯ sudo installer -pkg session-manager-plugin.pkg -target /
+sudo ln -s /usr/local/sessionmanagerplugin/bin/session-manager-plugin /usr/local/bin/session-manager-plugin
+Password:
+installer: Package name is session-manager-plugin
+installer: Installing at base path /
+installer: The install was successful.
+
+onnx-acoustic on  feat/proper-AWS-deployment [$!?] took 7s 
+❯ aws ssm start-session --target i-03c2bba49961b3e6f --profile dev                                                                            
+
+Starting session with SessionId: admin2026-advjkuyike5p9qghg8c9tv4ir4
+
+
+SessionId: admin2026-advjkuyike5p9qghg8c9tv4ir4 : Plugin with name Standard_Stream not found. Step name: Standard_Stream
+```
+
+##### Adjusting the instance for boot success
+
+So, the session starts but doesn't establish.
+I wanted to see what the instance is logging during boot:
+```zsh
+aws ec2 get-console-output \
+--instance-id i-… \
+--profile dev \
+--output text
+```
+And learned that the disk might be full:
+```zsh
+[   62.955228] cloud-init[1939]: src/BAPE_src/results.tgz:  write error (disk full?).  Continue? (y/n/^C)
+[   62.955332] cloud-init[1939]: warning:  src/BAPE_src/results.tgz is probably truncated
+```
+
+- the `bape_src.zip` contained the `results.tgz` file which contains training results and resulting model weights, these were required to export the onnx model but are not on the production instance.
+
+I had to create a new zip file without any tgz archive or the results folder:
+```zsh
+zip -r bape_src.zip src/BAPE_src -x "*.tgz" "src/BAPE_src/results/*"
+```
+
+Overwrite the file in my S3 bucket:
+```zsh
+aws s3 cp bape_src.zip s3://onnx-deployment-phase3-artifacts-dgoossens-20250106/bape_src.zip --profile dev
+```
+
+Now around 19MB, was 330MB before.
+
+Relaunch the t3.small instance, again with 8GB RAM.
+
+This time the console output returned an Error during the installation of the python requirements:
+
+```zsh
+[   47.310115] cloud-init[1941]: Installing collected packages: mpmath, typing-extensions, sympy, networkx, fsspec, filelock, torch, torchaudio
+[   54.975999] cloud-init[1941]: ERROR: Could not install packages due to an OSError: [Errno 28] No space left on device: '/usr/local/lib64/pyth
+```
+
+I deleted the instance, added a 2GB Swapfile to the user-data.sh script and startet it again, but ran out of space again:
+
+```sh
+aws ec2 get-console-output --target i-… --profile dev --output text
+
+(…)
+ip-10-16-2-179 login: [   15.839630] cloud-init[1939]: dd: error writing '/swapfile': No space left on device
+(…)
+```
+
+So I deleted the instance, left the 2GB Swapfile in `user-data.sh` but also launched it with a 20GB GP3 EBS volume. The SSM session was established successfully:
+
+```zsh
+❯ aws ssm start-session --target i-045198a0d962d756a --profile dev                        
+
+Starting session with SessionId: admin2026-kzun343cpikifbkqhrhifr62ui
+sh-5.2$
+```
+
+#### Adjusting dependencies
+
+But listing the root contents I couldn't find the `app.log` file, which is created at the end of the user-data, which made me assume the script breaks, so I looked into the cloud init output:
+
+```zsh
+tail -n 20 /var/log/cloud-init-output.log
+
+(…)
+ERROR: Could not find a version that satisfies the requirement click==8.3.1 (from versions: 0.1, 0.2, 0.3, 0.4, 0.5, 0.5.1, 0.6, 0.7, 1.0, 1.1, 2.0, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 3.0, 3.1, 3.2, 3.3, 4.0, 4.1, 5.0, 5.1, 6.0, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7.dev0, 6.7, 7.0, 7.1, 7.1.1, 7.1.2, 8.0.0a1, 8.0.0rc1, 8.0.0, 8.0.1, 8.0.2, 8.0.3, 8.0.4, 8.1.0, 8.1.1, 8.1.2, 8.1.3, 8.1.4, 8.1.5, 8.1.6, 8.1.7, 8.1.8)
+ERROR: No matching distribution found for click==8.3.1
+(…)
+```
+On the EC2 instance the pre-installed Python 3.9 version was not compatible with the dependencies so I updated the user-data.sh script to install and use Python3.11.
+
+I relaunched the t3.small instance with the attached 20GB GP3 SSD volume again:
+
+Dependency issue (model_procesor.py and audio.processor.py were not copied to S3 and not downloaded via the user-data.sh):
+  - uploaded missing files to S3 and updated user-data.sh script to download accordingly
+
+-> Path issue: model not found.
+Fixed path error manually on server to check API, and fixed it permanently in the user-data.sh script: 
+
+```zsh
+❯ aws ssm start-session --target i-07e342891fb3028b4 --profile dev             
+
+Starting session with SessionId: admin2026-vfasrq78ez2txjed6qf7bzece4
+```
+
+Hot fix:
+```sh
+sh-5.2$ tail -f /app/app.log
+2026-01-28 14:09:31,921 - API CRITICAL - FATAL: Could not load model at startup. Server will fail on requests. Error: [ONNXRuntimeError] : 3 : NO_SUCHFILE : Load model from onnx/super_param_estimator.onnx failed:Load model onnx/super_param_estimator.onnx failed. File doesn't exist
+INFO:     Started server process [10555]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+^C
+sh-5.2$ sudo su
+[root@ip-10-16-2-92 bin]# cd /app
+[root@ip-10-16-2-92 app]# mkdir onnx
+[root@ip-10-16-2-92 app]# mv super_param_estimator.onnx onnx/
+[root@ip-10-16-2-92 app]# pkill python3.11
+[root@ip-10-16-2-92 app]# nohup python3.11 -m uvicorn api:app --host 0.0.0.0 --port 8000 > app.log 2>&1 &
+[1] 11012
+[root@ip-10-16-2-92 app]# tail -f app.log
+nohup: ignoring input
+2026-01-28 14:22:19,006 - src.model_processor INFO - Model initialized successfully.
+2026-01-28 14:22:19,006 - src.model_processor INFO - Input Name: input_spectogram, Output Names: ['latent_vector', 'estimated_params', 'quantiles']
+INFO:     Started server process [11012]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+curl -v http://127.0.0.1:8000/docs
+
+q
+^C
+[root@ip-10-16-2-92 app]# curl -v http://127.0.0.1:8000/docs
+*   Trying 127.0.0.1:8000...
+* Connected to 127.0.0.1 (127.0.0.1) port 8000
+* using HTTP/1.x
+> GET /docs HTTP/1.1
+> Host: 127.0.0.1:8000
+> User-Agent: curl/8.15.0
+> Accept: */*
+> 
+* Request completely sent off
+< HTTP/1.1 200 OK
+< date: Wed, 28 Jan 2026 14:28:53 GMT
+< server: uvicorn
+< content-length: 932
+< content-type: text/html; charset=utf-8
+< 
+
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <link type="text/css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css">
+    <link rel="shortcut icon" href="https://fastapi.tiangolo.com/img/favicon.png">
+    <title>BAPE API - Swagger UI</title>
+    </head>
+    <body>
+    <div id="swagger-ui">
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+    <!-- `SwaggerUIBundle` is now available on the page -->
+    <script>
+    const ui = SwaggerUIBundle({
+        url: '/openapi.json',
+    "dom_id": "#swagger-ui",
+"layout": "BaseLayout",
+"deepLinking": true,
+"showExtensions": true,
+"showCommonExtensions": true,
+oauth2RedirectUrl: window.location.origin + '/docs/oauth2-redirect',
+    presets: [
+        SwaggerUIBundle.presets.apis,
+        SwaggerUIBundle.SwaggerUIStandalonePreset
+        ],
+    })
+    </script>
+    </body>
+    </html>
+```
+
+After I fixed the user-data.sh script to recreate the local folder structure, creating an onnx and src directory on the EC2 instance, I needed to build the encrypted connection from client to ALBs for which I first created my own dummy certificate to set up AWS Certificate Manager.
+
+#### Setting up encrypted client-ALB connection
+
+Create a private RSA key:
+```zsh
+openssl genrsa -out private.key 2048
+```
+
+Generate the cert:
+```zsh
+openssl req -new -x509 -sha256 -key private.key -out certificate.crt -days 10 -subj "/C=DE/ST=Berlin/L=Berlin/O=BAPE-Deployment/CN=bape-api.local" 
+```
+
+creates a self-signed X.509 certificate using the private key:
+
+`openssl req` - certificate request utility
+`-new` - create a new certificate request
+`-x509` - output a self-signed certificate instead of a certificate request
+`-sha256` - use SHA-256 hashing algorithm for the signature
+`-key private.key` - use existing private.key
+`-out certificate.crt` - save the certificate to this file
+`-days 10` - certificate is valid for 10 days
+
+The -subj flag avoids interactive prompts:
+
+`C=DE` - Country: Germany
+`ST=Berlin` - State/Province: Berlin
+`L=Berlin` - Locality/City: Berlin
+`O=BAPE-Deployment` - Organization name
+`CN=bape-api.local` - Common Name (the domain/hostname this cert is for)
+
+#### Upload to ACM
+
+With private.key and certificate.crt in place we can uplaod it to AWS Certificate Manager.
+
+```zsh
+aws acm import-certificate \
+--certificate fileb://certificate.crt \
+--private-key fileb://private.key \
+--tags Key=Name,Value=phase3-self-signed-cert \
+--profile dev
+```
+Returns CartificateArn.
+
+#### Create Target Group
+The ALB needs a logical container it can direct to, where the EC2 instance lives.
+
+```zsh
+aws elbv2 create-target-group \
+--name phase3-targets \
+--protocol HTTP \
+--port 8000 \
+--vpc-id vpc-0772e7cc248fd716c \
+--target-type instance \
+--health-check-path /docs \
+--health-check-interval-seconds 30 \
+--profile dev
+```
+
+returns target group as JSON: ### X.13 elbv2 target groups
+
+#### Register instance to target group
+
+Now I can register the EC2 instance in this target group:
+
+```zsh
+aws elbv2 register-targets \
+--target-group-arn arn:aws:elasticloadbalancing:eu-central-1:609662023678:targetgroup/phase3-targets/a05ae4bc1fa3a646 \
+--targets Id=i-0debbaec1f3b39d10 \
+--profile dev
+```
+
+retruns nothing
+
+#### Deploy ALB across both public subnets
+
+The ALB needs at least two subnets in two distinct AZs.
+It also needs a security group which we created earlier.
+
+```zsh
+aws elbv2 create-load-balancer \
+--name phase3-alb \
+--subnets subnet-0e9fc06ce108ce4ea subnet-0f62225d8592a44e6 \
+--security-groups sg-040e0a1163cf1f846 \
+--scheme internet-facing \
+--tags Key=Name,Value=phase3-alb \
+--profile dev
+```
+returns ELBv2 as JSON, see "X.14. ELBv2"
+
+#### Create HTTPS listener
+
+To encrypt the input from the client to the ALB we need to add an HTTPS listener, which listens on the secure port 443 and uses the self-signed cert I just created:
+
+```zsh
+aws elbv2 create-listener \
+--load-balancer-arn arn:aws:elasticloadbalancing:eu-central-1:609662023678:loadbalancer/app/phase3-alb/57debc553d5f0612 \
+--protocol HTTPS --port 443 \
+--certificates CertificateArn=arn:aws:acm:eu-central-1:609662023678:certificate/ebd5aa00-42da-48bd-b746-4f173221b3ee \
+--default-actions Type=forward,TargetGroupArn=arn:aws:elasticloadbalancing:eu-central-1:609662023678:targetgroup/phase3-targets/a05ae4bc1fa3a646 \
+--profile dev
+```
+returns HTTPS listener JSON, "X.15 HTTPS listener"
+
+#### Get ALB URL
+
+By getting the load balancer description I retrieve the Load Balancer URL.
+
+Opening the provided DNS Name URL from the `aws elbv2 create-load-balancer …` leads to a `503 – Service Temporarily Unaivalable`
+
+So I checked the target health:
+```zsh
+aws elbv2 describe-target-health \
+--target-group-arn arn:aws:elasticloadbalancing:eu-central-1:609662023678:targetgroup/phase3-targets/a05ae4bc1fa3a646 \
+--profile dev
+```
+
+Part of the return:
+```JSON
+"TargetHealth": {
+                "State": "unused",
+                "Reason": "Target.NotInUse",
+                "Description": "Target is in an Availability Zone that is not enabled for the load balancer"
+                },…
+```
+
+The ALB is spread across both publiuc subnets which are in AZ eu-central-1a and eu-central-1b, whereas the target is in eu-central-1c. but the target has to be in one of the data centers to which the ALB is registered.
+
+So I create another Private Subnet, Private Subnet B, located in eu-central-1a.
+
+```zsh
+aws ec2 create-subnet \
+--vpc-id vpc-0772e7cc248fd716c \
+--cidr-block 10.16.3.0/24 \
+--availability-zone eu-central-1a \
+--tag-specifications "ResourceType=subnet,Tags=[{Key=Name,Value=phase3-private-subnet-b}]" \
+--profile dev
+```
+
+This subnet must be associated with the same private route table as public subnet A:
+```zsh
+aws ec2 associate-route-table \
+--subnet-id subnet-01a83f167c84dde5b \
+--route-table-id rtb-0d180e4bfff0d77ee \
+--profile dev
+```
+
+Now I termninate the instance in Private Subnet A, to relaunch it in Private Subnet B:
+```zsh
+aws ec2 terminate-instances --instance-ids i-0ceed0bfeac218273 --profile dev
+```
+
+Restart in `1a`
+```zsh
+aws ec2 run-instances \
+--image-id ami-029cdb80a7069a70a \
+--instance-type t3.small \
+--subnet-id subnet-01a83f167c84dde5b \
+--security-group-ids sg-0eefa1fcc6557d2f8 \
+--iam-instance-profile Name=phase3-ec2-profile \
+--block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":20,"VolumeType":"gp3"}}]' \
+--tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=phase3-prod-instance}]' \
+--user-data file://user_data.sh \
+--profile dev
+```
+
+This gives me a new instance-id (i-0822edff0e710f487), which I will need to register as a target.
+```zsh
+aws elbv2 register-targets \
+--target-group-arn arn:aws:elasticloadbalancing:eu-central-1:609662023678:targetgroup/phase3-targets/a05ae4bc1fa3a646 \
+--targets Id=i-0822edff0e710f487 \
+--profile dev
+```
+
+Now I get a `502 - Bad Gateway` and a `elbv2 describe-target-health …` returns an `unhealthy` state but can see that the check is happening with the correct instance on the right port 8000.
+
+I switch back to the debugging techniques I used during instance setup
+
+```zsh
+aws ssm start-session --target i-0822edff0e710f487 --profile dev
+```
+
+Inside the instance shell I could see that there was no file `app.log` which is created at server startup so the boot process must have crashed somewhere.
+
+Since I'm already inside the instance, I can use Linux to get the cloud-init-output.log instead of `aws ec2 get-console-output`
+
+```sh
+sudo tail -n 50 /var/log/cloud-init-output.log
+```
+
+Response:
+```zsh
+download: s3://onnx-deployment-phase3-artifacts-dgoossens-20250106/api.py to ./api.py
+download: s3://onnx-deployment-phase3-artifacts-dgoossens-20250106/requirements.txt to ./requirements.txt
+download: s3://onnx-deployment-phase3-artifacts-dgoossens-20250106/bape_src.zip to ./bape_src.zip
+fatal error: An error occurred (403) when calling the HeadObject operation: Forbidden
+2026-02-02 12:44:07,241 - cc_scripts_user.py[WARNING]: Failed to run module scripts-user (scripts in /var/lib/cloud/instance/scripts)
+2026-02-02 12:44:07,243 - util.py[WARNING]: Running module scripts-user (<module 'cloudinit.config.cc_scripts_user' from '/usr/lib/python3.9/site-packages/cloudinit/config/cc_scripts_user.py'>) failed
+```
+
+It seems like my script fails after downloading the zip… I had a mistake in the script telling the instance to download the `super_param_estimator.onnx` from within an `onnx/` *folder*, which was incorrect.
+=======================================================================
+-----START PERSONAL NOTES (temporary, must be deleted before prod)-----
+=======================================================================
+
+Restore Plumbing: NAT Gateway + Route Table Fix.
+
+- allocate EIP
+```zsh
+aws ec2 allocate-address \
+--domain vpc \
+--tag-specifications "ResourceType=elastic-ip, Tags=[{Key=Name,Value=phase3-eip}]" \
+--profile dev
+```
+
+Alternative: store allocation id in variable
+
+```zsh
+ALLOC_ID=$(aws ec2 allocate-address \
+--domain vpc \
+--tag-specifications "ResourceType=elastic-ip, Tags=[{Key=Name,Value=phase3-eip}]" \
+--profile dev \
+--query "AllocationId" \
+--output text)
+```
+- create NAT GW in Public SN A
+
+```zsh
+aws ec2 create-nat-gateway \
+--subnet-id subnet-0e9fc06ce108ce4ea \
+--allocation-id eipalloc-02e1307aa46938763 \
+--tag-specifications "ResourceType=natgateway,Tags=[{Key=Name,Value=phase3-natgw}]" \
+--profile dev
+```
+
+Alternative: Store NAT Gateway ID in variable
+```zsh
+NAT_ID=$( \
+aws ec2 create-nat-gateway \
+--subnet-id subnet-0e9fc06ce108ce4ea \
+--allocation-id $ALLOC_ID \
+--tag-specifications "ResourceType=natgateway,Tags=[{Key=Name,Value=phase3-natgw}]" \
+--profile dev \
+--query 'NatGateway.NatGatewayId' \
+--output text) \
+echo "NAT Gateway ID: $NAT_ID"
+```
+- replace route
+
+```zsh
+aws ec2 replace-route \
+--route-table-id rtb-0d180e4bfff0d77ee \
+--destination-cidr-block 0.0.0.0/0 \
+--nat-gateway-id $NAT_ID \
+--profile dev
+```
+
+Launch Instance: We need the Instance ID before we can register it with the Load Balancer.
+
+- launch instance with additional EBS volume:
+```zsh
+aws ec2 run-instances \
+--image-id ami-029cdb80a7069a70a \
+--instance-type t3.small \
+--subnet-id subnet-0f8b792c550dc1f57 \ ##PAY ATTENTION TO ALB
+--security-group-ids sg-0eefa1fcc6557d2f8 \
+--iam-instance-profile Name=phase3-ec2-profile \
+--block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":20,"VolumeType":"gp3"}}]' \
+--tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=phase3-prod-instance-python311}]' \
+--user-data file://user_data.sh \
+--profile dev
+```
+
+current instance: i-0822edff0e710f487
+
+
+Create Certificates: Generate a self-signed cert locally (openssl) and import it to AWS ACM (Certificate Manager).
+Create Target Group: This is the logical container for your instances.
+Register Targets: Put your running instance into that group.
+Create ALB: The actual infrastructure.
+Create Listener: The logic that ties it all together (Listen on 443 -> Use Cert -> Forward to Target Group).
+
+
+Shut down:
+
+aws ec2 terminate-instances --instance-ids i-0debbaec1f3b39d10 --profile dev
+
+aws elbv2 delete-load-balancer --load-balancer-arn arn:aws:elasticloadbalancing:eu-central-1:609662023678:loadbalancer/app/phase3-alb/7e10e37d693e9f85 --profile dev
+
+aws ec2 delete-nat-gateway --nat-gateway-id nat-0966ea833ce1a691c --profile dev
+
+aws ec2 release-address --allocation-id eipalloc-02e1307aa46938763 --profile dev
+
+Restart
+
+=======================================================================
+--------------------------END PERSONAL NOTES---------------------------
+=======================================================================
+
+
+
+
+
+I don't want to sink much more time into this and will use the help of AWS VPC Reachability Analyzer.
+
 
 ---
 ---
@@ -939,6 +1731,51 @@ aws ec2 reboot-instances \
 - subnet-id: subnet-0f8b792c550dc1f57 \
 - AZ: eu-central-1c
 
+#### X.1.1.4. Private Subnet B (`phase3-private-subnet-a`)
+- CIDR-Range: 10.16.3.0/24: 10.16.3.0 - 10.16.3.255
+
+***retrieved after launch:***
+- subnet-id: subnet-01a83f167c84dde5b \
+- AZ: eu-central-1a
+
+
+```JSON
+{
+    "Subnet": {
+        "AvailabilityZoneId": "euc1-az2",
+        "MapCustomerOwnedIpOnLaunch": false,
+        "OwnerId": "609662023678",
+        "AssignIpv6AddressOnCreation": false,
+        "Ipv6CidrBlockAssociationSet": [],
+        "Tags": [
+            {
+                "Key": "Name",
+                "Value": "phase3-private-subnet-b"
+            }
+        ],
+        "SubnetArn": "arn:aws:ec2:eu-central-1:609662023678:subnet/subnet-01a83f167c84dde5b",
+        "EnableDns64": false,
+        "Ipv6Native": false,
+        "PrivateDnsNameOptionsOnLaunch": {
+            "HostnameType": "ip-name",
+            "EnableResourceNameDnsARecord": false,
+            "EnableResourceNameDnsAAAARecord": false
+        },
+        "SubnetId": "subnet-01a83f167c84dde5b",
+        "State": "available",
+        "VpcId": "vpc-0772e7cc248fd716c",
+        "CidrBlock": "10.16.3.0/24",
+        "AvailableIpAddressCount": 251,
+        "AvailabilityZone": "eu-central-1a",
+        "DefaultForAz": false,
+        "MapPublicIpOnLaunch": false
+    }
+}
+```
+
+
+
+
 ### X.2. IGW and attachment
 
 #### X.2.1. IGW
@@ -950,39 +1787,37 @@ aws ec2 reboot-instances \
 
 ### X.3. NATGW
 - name: "phase3-natgw"
-- resulting from `aws ec2 describe-nat-gateways --profile dev`:
+- resulting from `aws ec2 create-nat-gateway`:
 
 ```JSON
 {
-    "NatGateways": [
-        {
-            "CreateTime": "2026-01-15T12:10:55+00:00",
-            "NatGatewayAddresses": [
-                {
-                    "AllocationId": "eipalloc-006f010b0f4618f65",
-                    "NetworkInterfaceId": "eni-0fabe5b08c0796b21",
-                    "PrivateIp": "10.16.0.164",
-                    "PublicIp": "18.157.244.235",
-                    "AssociationId": "eipassoc-095115bbb98203688",
-                    "IsPrimary": true,
-                    "Status": "succeeded"
-                }
-            ],
-            "NatGatewayId": "nat-095f0051a71bbe536",
-            "State": "available",
-            "SubnetId": "subnet-0e9fc06ce108ce4ea",
-            "VpcId": "vpc-0772e7cc248fd716c",
-            "Tags": [
-                {
-                    "Key": "Name",
-                    "Value": "phase3-natgw"
-                }
-            ],
-            "ConnectivityType": "public"
-        }
-    ]
+    "ClientToken": "3853180f-9b37-4e2d-aaac-9919984338c4",
+    "NatGateway": {
+        "CreateTime": "2026-01-30T14:24:14+00:00",
+        "NatGatewayAddresses": [
+            {
+                "AllocationId": "eipalloc-02e1307aa46938763",
+                "IsPrimary": true,
+                "Status": "associating"
+            }
+        ],
+        "NatGatewayId": "nat-0966ea833ce1a691c",
+        "State": "pending",
+        "SubnetId": "subnet-0e9fc06ce108ce4ea",
+        "VpcId": "vpc-0772e7cc248fd716c",
+        "Tags": [
+            {
+                "Key": "Name",
+                "Value": "phase3-natgw"
+            }
+        ],
+        "ConnectivityType": "public"
+    }
 }
 ```
+
+
+
 
 ### X.4. ELB/ALB
     - "phase3-alb"
@@ -1058,6 +1893,7 @@ aws ec2 reboot-instances \
 - Source: "phase3-SG1-ALB-1", "phase3-SG3-ALB-2", 
 - Port: 8000 (FastAPI)
 - Description: Allow inbound traffic from ALB-1 and ALB-2 to FastAPIapp.
+
 as JSON:
 ```JSON
 {
@@ -1115,6 +1951,8 @@ as JSON:
   - Association ID: `rtbassoc-00620f6c992fde5c3`
 - `phase3-private-route-table` with `phase3-private-subnet-a`
   - Association ID: `rtbassoc-07376b41c8a4b9ce4`
+- `phase3-private-route-table` with `phase3-private-subnet-b`
+  - Association ID: `rtbassoc-024c1bdb4fa6538e3`
 
 ### X.7. Elastic IP 
 
@@ -1122,11 +1960,11 @@ JSON result of `aws ec2 allocate-address …`
     
 ```JSON
 {
-    "AllocationId": "eipalloc-006f010b0f4618f65",
+    "AllocationId": "eipalloc-02e1307aa46938763",
     "PublicIpv4Pool": "amazon",
     "NetworkBorderGroup": "eu-central-1",
     "Domain": "vpc",
-    "PublicIp": "18.157.244.235"
+    "PublicIp": "63.182.37.212"
 }
 ```
 
@@ -1168,7 +2006,7 @@ result of `aws ec2 describe-instances …`
 
 ```JSON
 (…)
-"InstanceId": "i-04aaa7bc345a24671",
+"InstanceId": "i-0d0690e47da99c01c",
 "ImageId": "ami-029cdb80a7069a70a",
 (…)
 ```
@@ -1188,5 +2026,128 @@ result of `iam create-instance-profile`
     }
 }
 ``` 
+
+#### X.11.1. DEbug Instance in Public Subnet A
+`"InstanceId": "i-07cbf883226beb48a"`
+
+### X.12. Self-signed ACM cert
+
+result auf `aws acm import-certificate …`:
+
+```JSON
+{
+    "CertificateArn": "arn:aws:acm:eu-central-1:609662023678:certificate/ebd5aa00-42da-48bd-b746-4f173221b3ee"
+}
+```
+### X.13 elbv2 target groups
+Result of `aws elbv2 create-target-group …`:
+
+```JSON
+{
+    "TargetGroups": [
+        {
+            "TargetGroupArn": "arn:aws:elasticloadbalancing:eu-central-1:609662023678:targetgroup/phase3-targets/a05ae4bc1fa3a646",
+            "TargetGroupName": "phase3-targets",
+            "Protocol": "HTTP",
+            "Port": 8000,
+            "VpcId": "vpc-0772e7cc248fd716c",
+            "HealthCheckProtocol": "HTTP",
+            "HealthCheckPort": "traffic-port",
+            "HealthCheckEnabled": true,
+            "HealthCheckIntervalSeconds": 30,
+            "HealthCheckTimeoutSeconds": 5,
+            "HealthyThresholdCount": 5,
+            "UnhealthyThresholdCount": 2,
+            "HealthCheckPath": "/docs",
+            "Matcher": {
+                "HttpCode": "200"
+            },
+            "TargetType": "instance",
+            "ProtocolVersion": "HTTP1",
+            "IpAddressType": "ipv4"
+        }
+    ]
+}
+```
+
+### X.14. ELBv2
+
+Result of `aws elbv2 create-load-balancer …`:
+
+```JSON
+{
+    "LoadBalancers": [
+        {
+            "LoadBalancerArn": "arn:aws:elasticloadbalancing:eu-central-1:609662023678:loadbalancer/app/phase3-alb/57debc553d5f0612",
+            "DNSName": "phase3-alb-1107223156.eu-central-1.elb.amazonaws.com",
+            "CanonicalHostedZoneId": "Z215JYRZR1TBD5",
+            "CreatedTime": "2026-02-02T12:11:50.411000+00:00",
+            "LoadBalancerName": "phase3-alb",
+            "Scheme": "internet-facing",
+            "VpcId": "vpc-0772e7cc248fd716c",
+            "State": {
+                "Code": "provisioning"
+            },
+            "Type": "application",
+            "AvailabilityZones": [
+                {
+                    "ZoneName": "eu-central-1b",
+                    "SubnetId": "subnet-0f62225d8592a44e6",
+                    "LoadBalancerAddresses": []
+                },
+                {
+                    "ZoneName": "eu-central-1a",
+                    "SubnetId": "subnet-0e9fc06ce108ce4ea",
+                    "LoadBalancerAddresses": []
+                }
+            ],
+            "SecurityGroups": [
+                "sg-040e0a1163cf1f846"
+            ],
+            "IpAddressType": "ipv4"
+        }
+    ]
+}
+```
+
+### X.15. HTTPS listener
+
+Result of `aws elbv2 create-listener …``
+
+```JSON
+{
+    "Listeners": [
+        {
+            "ListenerArn": "arn:aws:elasticloadbalancing:eu-central-1:609662023678:listener/app/phase3-alb/57debc553d5f0612/f736d51e97cc34f9",
+            "LoadBalancerArn": "arn:aws:elasticloadbalancing:eu-central-1:609662023678:loadbalancer/app/phase3-alb/57debc553d5f0612",
+            "Port": 443,
+            "Protocol": "HTTPS",
+            "Certificates": [
+                {
+                    "CertificateArn": "arn:aws:acm:eu-central-1:609662023678:certificate/ebd5aa00-42da-48bd-b746-4f173221b3ee"
+                }
+            ],
+            "SslPolicy": "ELBSecurityPolicy-2016-08",
+            "DefaultActions": [
+                {
+                    "Type": "forward",
+                    "TargetGroupArn": "arn:aws:elasticloadbalancing:eu-central-1:609662023678:targetgroup/phase3-targets/a05ae4bc1fa3a646",
+                    "ForwardConfig": {
+                        "TargetGroups": [
+                            {
+                                "TargetGroupArn": "arn:aws:elasticloadbalancing:eu-central-1:609662023678:targetgroup/phase3-targets/a05ae4bc1fa3a646",
+                                "Weight": 1
+                            }
+                        ],
+                        "TargetGroupStickinessConfig": {
+                            "Enabled": false
+                        }
+                    }
+                }
+            ]
+        }
+    ]
+}
+```
 
 ## X+1. Learnings and lookout for phase 4.

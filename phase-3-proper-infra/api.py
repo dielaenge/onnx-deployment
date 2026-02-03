@@ -1,4 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
 import uvicorn
 import time
 import json
@@ -18,8 +21,16 @@ logger = logging.getLogger("API")
 
 app = FastAPI(title="BAPE API")
 
+# FRONTEND
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.get("/")
+async def read_index():
+    return FileResponse('static/index.html')
+
 # --- Model init (happens once at server startup) ---
-MODEL_PATH = "onnx/super_param_estimator.onnx"
+# was "onnx/super_param_estimator.onnx" locally
+MODEL_PATH = "super_param_estimator.onnx"
 processor = None
 try:
     processor = AcousticModelProcessor(MODEL_PATH)
@@ -27,6 +38,8 @@ except Exception as e:
     logger.critical("FATAL: Could not load model at startup. Server will fail on requests. Error: %s", e)
     # note: No exit here as we just set processor = None
 
+
+#API ENDPOINTS
 @app.get("/health")
 def health_check():
     """Healthcheck endpoint."""
@@ -111,6 +124,7 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
         }
     }
 
+# LAUNCH
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
     

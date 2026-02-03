@@ -12,6 +12,11 @@ venv.nosync/
 aws_config
 credentials
 
+# --- Security ---
+*.key
+*.crt
+*.pem
+
 # --- Python Cache & Compiled Files ---
 __pycache__/
 *.pyc
@@ -37,6 +42,7 @@ pip-wheel-metadata/
 # --- OS-specific Files ---
 .DS_Store
 Thumbs.db
+*.pkg
 
 # --- big artifacts ---
 *.zip
@@ -58,3 +64,7 @@ docs/LLM-comments_acoustic_processor.py
 temp/
 phase-3-proper-infra/src/bape/
 aws/
+debug_ssm*.sh
+*.png
+pro
+private

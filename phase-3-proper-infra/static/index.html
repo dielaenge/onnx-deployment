@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BAPE | Blind Acoustic Parameter Estimator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .recording-glow { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+    </style>
+</head>
+<body class="bg-[#0f172a] text-slate-200 min-h-screen flex flex-col items-center justify-center p-6 font-sans">
+
+    <div class="max-w-2xl w-full space-y-8 text-center">
+        <!-- Header -->
+        <div class="space-y-2">
+            <h1 class="text-5xl font-bold tracking-tight bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">BAPE</h1>
+            <p class="text-slate-400 text-lg uppercase tracking-widest font-light">Blind Acoustic Parameter Estimator</p>
+        </div>
+
+        <!-- Main Card -->
+        <div class="glass rounded-3xl p-10 space-y-8 shadow-2xl">
+            <div id="status-text" class="text-sm font-medium text-blue-400 uppercase tracking-wider">Ready to Analyze</div>
+            
+            <!-- Mic Button -->
+            <div class="flex justify-center">
+                <button id="mic-btn" class="h-32 w-32 rounded-full bg-slate-800 flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 group border-4 border-slate-700">
+                    <svg id="mic-icon" xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-slate-400 group-hover:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                    </svg>
+                </button>
+            </div>
+
+            <p id="instruction" class="text-slate-500 italic">Click to start recording...</p>
+
+            <!-- Result Area -->
+            <div id="result-area" class="hidden space-y-4 animate-in fade-in slide-in-from-bottom-4">
+                <div class="h-px bg-slate-800 w-full"></div>
+                <h3 class="text-left font-semibold text-emerald-400 uppercase text-xs tracking-widest">Inference Results</h3>
+                <pre id="json-result" class="text-left text-xs bg-black/30 p-4 rounded-xl overflow-x-auto font-mono text-emerald-500/80 border border-emerald-500/20"></pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        const micBtn = document.getElementById('mic-btn');
+        const micIcon = document.getElementById('mic-icon');
+        const statusText = document.getElementById('status-text');
+        const instruction = document.getElementById('instruction');
+        const resultArea = document.getElementById('result-area');
+        const jsonResult = document.getElementById('json-result');
+
+        micBtn.onclick = async () => {
+            if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+                startRecording();
+            } else {
+                stopRecording();
+            }
+        };
+
+        async function startRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
+
+                mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+                mediaRecorder.onstop = sendData;
+
+                mediaRecorder.start();
+                micBtn.classList.add('recording-glow', 'bg-red-500/20', 'border-red-500/50');
+                micIcon.classList.replace('text-slate-400', 'text-red-500');
+                statusText.innerText = "Listening...";
+                statusText.classList.replace('text-blue-400', 'text-red-400');
+                instruction.innerText = "Click again to analyze";
+            } catch (err) {
+                alert("Microphone access denied. Ensure you are using HTTPS.");
+            }
+        }
+
+        function stopRecording() {
+            mediaRecorder.stop();
+            micBtn.classList.remove('recording-glow', 'bg-red-500/20', 'border-red-500/50');
+            micIcon.classList.replace('text-red-500', 'text-slate-400');
+            statusText.innerText = "Processing...";
+            statusText.classList.replace('text-red-400', 'text-blue-400');
+        }
+
+        async function sendData() {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            const formData = new FormData();
+            formData.append('file', audioBlob, 'recording.wav');
+
+            try {
+                // Pointing to your FastAPI endpoint
+                const response = await fetch('/acou-vec/generate', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                
+                resultArea.classList.remove('hidden');
+                jsonResult.textContent = JSON.stringify(data, null, 2);
+                statusText.innerText = "Analysis Complete";
+            } catch (err) {
+                statusText.innerText = "Inference Failed";
+                console.error(err);
+            }
+        }
+    </script>
+</body>
+</html>
