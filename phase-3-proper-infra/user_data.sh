@@ -65,3 +65,5 @@ pip3.11 install -r requirements.txt
 # `2>&1`: Linux output streams 1 (standard/success) and 2 (errors) are merged into app.log // command redirects 2 into 1
 # `&` Ampersand makes the command a background process
 nohup python3.11 -m uvicorn api:app --host 0.0.0.0 --port 8000 > app.log 2>&1 &
+
+

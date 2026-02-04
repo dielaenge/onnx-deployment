@@ -7,7 +7,6 @@ import time
 import json
 import logging
 import uuid
-from memory_profiler import memory_usage
 
 from src.model_processor import AcousticModelProcessor
 from src.audio_processor import transform_audio_to_spectrogram
@@ -30,7 +29,7 @@ async def read_index():
 
 # --- Model init (happens once at server startup) ---
 # was "onnx/super_param_estimator.onnx" locally
-MODEL_PATH = "super_param_estimator.onnx"
+MODEL_PATH = "onnx/super_param_estimator.onnx"
 processor = None
 try:
     processor = AcousticModelProcessor(MODEL_PATH)
@@ -76,13 +75,11 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
 
     # 4. Run inference and get results
     start_time = time.perf_counter()
-    mem_profile, model_outputs = memory_usage((processor.generate_vector, (audio_spec,)),
-    retval=True,
-    interval=0.1)
+    model_outputs = processor.generate_vector(audio_spec)
     end_time = time.perf_counter()
 
     processing_time_ms = (end_time - start_time) * 1000
-    max_mem_profile = round(max(mem_profile))
+    
     logger.info("Inference complete for %s. Time: %s.3f ms", audio_file.filename, processing_time_ms)
 
     # 5. API respone (improved with BAPE integration)
@@ -94,8 +91,7 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
         "request_metadata": {
             #"request_id": str(uuid.uuid4()),
             "filename": audio_file.filename,
-            "processing_time_ms": round(processing_time_ms, 3),
-            "max_memory_usage_mb": max_mem_profile 
+            "processing_time_ms": round(processing_time_ms, 3)
         },
 
         "model_metadata": {

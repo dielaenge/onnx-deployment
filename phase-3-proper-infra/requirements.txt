@@ -12,10 +12,6 @@ annotated-types==0.7.0
     # via pydantic
 anyio==4.12.0
     # via starlette
-audioop-lts==0.2.2
-    # via
-    #   standard-aifc
-    #   standard-sunau
 audioread==3.1.0
     # via librosa
 certifi==2025.11.12
