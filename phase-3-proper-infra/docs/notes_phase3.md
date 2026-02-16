@@ -1433,7 +1433,7 @@ aws acm import-certificate \
 --tags Key=Name,Value=phase3-self-signed-cert \
 --profile dev
 ```
-Returns CartificateArn.
+Returns CertificateArn.
 
 #### Create Target Group
 The ALB needs a logical container it can direct to, where the EC2 instance lives.
@@ -1459,7 +1459,7 @@ Now I can register the EC2 instance in this target group:
 ```zsh
 aws elbv2 register-targets \
 --target-group-arn arn:aws:elasticloadbalancing:eu-central-1:609662023678:targetgroup/phase3-targets/a05ae4bc1fa3a646 \
---targets Id=i-0debbaec1f3b39d10 \
+--targets Id=$INSTANCE_ID \
 --profile dev
 ```
 
@@ -1481,13 +1481,15 @@ aws elbv2 create-load-balancer \
 ```
 returns ELBv2 as JSON, see "X.14. ELBv2"
 
+Stored `LoadBalancers[0].DNSName` in `$LB_DNS`.
+
 #### Create HTTPS listener
 
 To encrypt the input from the client to the ALB we need to add an HTTPS listener, which listens on the secure port 443 and uses the self-signed cert I just created:
 
 ```zsh
 aws elbv2 create-listener \
---load-balancer-arn arn:aws:elasticloadbalancing:eu-central-1:609662023678:loadbalancer/app/phase3-alb/57debc553d5f0612 \
+--load-balancer-arn $LB_ARN \
 --protocol HTTPS --port 443 \
 --certificates CertificateArn=arn:aws:acm:eu-central-1:609662023678:certificate/ebd5aa00-42da-48bd-b746-4f173221b3ee \
 --default-actions Type=forward,TargetGroupArn=arn:aws:elasticloadbalancing:eu-central-1:609662023678:targetgroup/phase3-targets/a05ae4bc1fa3a646 \
@@ -1561,7 +1563,7 @@ This gives me a new instance-id (i-0822edff0e710f487), which I will need to regi
 ```zsh
 aws elbv2 register-targets \
 --target-group-arn arn:aws:elasticloadbalancing:eu-central-1:609662023678:targetgroup/phase3-targets/a05ae4bc1fa3a646 \
---targets Id=i-0822edff0e710f487 \
+--targets Id=$INSTANCE_ID \
 --profile dev
 ```
 
@@ -1583,15 +1585,58 @@ sudo tail -n 50 /var/log/cloud-init-output.log
 
 Response:
 ```zsh
+(…)
 download: s3://onnx-deployment-phase3-artifacts-dgoossens-20250106/api.py to ./api.py
 download: s3://onnx-deployment-phase3-artifacts-dgoossens-20250106/requirements.txt to ./requirements.txt
 download: s3://onnx-deployment-phase3-artifacts-dgoossens-20250106/bape_src.zip to ./bape_src.zip
 fatal error: An error occurred (403) when calling the HeadObject operation: Forbidden
 2026-02-02 12:44:07,241 - cc_scripts_user.py[WARNING]: Failed to run module scripts-user (scripts in /var/lib/cloud/instance/scripts)
 2026-02-02 12:44:07,243 - util.py[WARNING]: Running module scripts-user (<module 'cloudinit.config.cc_scripts_user' from '/usr/lib/python3.9/site-packages/cloudinit/config/cc_scripts_user.py'>) failed
+(…)
 ```
 
 It seems like my script fails after downloading the zip… I had a mistake in the script telling the instance to download the `super_param_estimator.onnx` from within an `onnx/` *folder*, which was incorrect.
+
+Fixing the path in the S3 command and relaunching the instance produced a clean app.log [Reference] and enabled a successful launch [REFERENCE].
+
+---
+
+## 3. Frontend edits
+
+index.html:
+tailwind.css
+JavaScript
+
+api.py mounts static/ folder
+
+## 4. Logging, documenting versioning
+
+Front end 
+- start
+- success
+AWS Console 
+- EC2 - Target Details
+- EC2 - Instance Monitoring
+
+## 5. Finishing thougts: phase 3 learnings phase 4 lookout
+
+**Status**:
+
+- Infrastructure Status: Validated.
+
+- VPC: 2 Public x 2 Private SN / ALB / NATGW / EC2 instance (1x t3.small + 20GB EBS)
+- Security: Zero-trust implementation (SSM only, no SSH ports). SSL termination at ALB.
+- Setup: `user-data.sh` loads artifacts from S3 and starts up a FAST API server with a static HTML Tailwind frontend
+- Limitation: Browser microphone access requires a trusted Root CA certificate (Domain Name required). Feature verified via File Upload fallback.
+- Cost Analysis: Running cost is ~$2.50/day. High idle cost due to NAT Gateway and ALB.
+- Monitoring: Low resource utilization demonstrates ample headroom on t3.small for current traffic levels; future optimization could downsize compute or move to Lambda.
+See `final_cloud-init-output.log`and screenshots
+
+**Lookout**
+
+Goal: Refactor to Serverless to eliminate the NAT Gateway and idle compute costs.
+Technical Debt: Fix the "iPhone Audio Format" issue (M4A vs WAV) using server-side FFMPEG conversion in the application logic.
+
 =======================================================================
 -----START PERSONAL NOTES (temporary, must be deleted before prod)-----
 =======================================================================
@@ -1655,7 +1700,7 @@ Launch Instance: We need the Instance ID before we can register it with the Load
 aws ec2 run-instances \
 --image-id ami-029cdb80a7069a70a \
 --instance-type t3.small \
---subnet-id subnet-0f8b792c550dc1f57 \ ##PAY ATTENTION TO ALB
+--subnet-id subnet-01a83f167c84dde5b \ ##run in AZ linked to ALB!!
 --security-group-ids sg-0eefa1fcc6557d2f8 \
 --iam-instance-profile Name=phase3-ec2-profile \
 --block-device-mappings '[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":20,"VolumeType":"gp3"}}]' \
@@ -1664,7 +1709,7 @@ aws ec2 run-instances \
 --profile dev
 ```
 
-current instance: i-0822edff0e710f487
+current instance: i-0465b6033b78e7790
 
 
 Create Certificates: Generate a self-signed cert locally (openssl) and import it to AWS ACM (Certificate Manager).
@@ -1690,14 +1735,6 @@ Restart
 --------------------------END PERSONAL NOTES---------------------------
 =======================================================================
 
-
-
-
-
-I don't want to sink much more time into this and will use the help of AWS VPC Reachability Analyzer.
-
-
----
 ---
 
 ## X. Resources // As defined before and updated
@@ -1772,9 +1809,6 @@ I don't want to sink much more time into this and will use the help of AWS VPC R
     }
 }
 ```
-
-
-
 
 ### X.2. IGW and attachment
 

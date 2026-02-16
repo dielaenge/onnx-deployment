@@ -5,9 +5,11 @@ venv_py313
 env/
 ENV/
 venv.nosync/
+**/venv.nosync/
 
 # --- AWS and Local Config ---
 .envrc
+**/.envrc
 .aws/
 aws_config
 credentials

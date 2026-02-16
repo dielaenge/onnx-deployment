@@ -13,7 +13,10 @@ dnf update -y
 dnf install -y  python3.11 python3.11-pip unzip wget
 
 # 2. Install SSM-Agent
-dnf install -y amazon-ssm-agent
+if ! dnf list installed amazon-ssm-agent; then
+    echo "amazon-ssm-agent not installed. Installing…"
+    dnf install -y amazon-ssm-agent
+fi
 systemctl enable amazon-ssm-agent
 systemctl start amazon-ssm-agent
 
