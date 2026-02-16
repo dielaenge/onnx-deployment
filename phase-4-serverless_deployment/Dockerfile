@@ -32,6 +32,10 @@ COPY api.py ${LAMBDA_TASK_ROOT}
 
 ENV PORT=8080
 
+ENV NUMBA_CACHE_DIR=/tmp
+ENV JOBLIB_TEMP_FOLDER=/tmp
+ENV READINESS_CHECK_TIMEOUT=30
+
 # Clear the AWS Entrypoint so we can run uvicorn directly
 ENTRYPOINT []
 

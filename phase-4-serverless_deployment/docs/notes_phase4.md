@@ -160,8 +160,6 @@ With this setup step completed, I can move on to deploying the container image t
 Before, I deleted most of the BAPE_src files and anything related to model export which happens locally and must not be committed to the repo.
 
 **onnx/ and src/ clean up: STILL NECESSARY FOR PHASE 3!**
-=========================================================
-
 Also, I refactored the shared upload function to display the name of the file upload isntead of input.wav or name it mic_recording.wav when it's not a file upload:
 
 ```index.html
@@ -210,7 +208,7 @@ Actually, I don't want to guess here and would like to run preliminary memory te
 
 But having to guess, I would go with 4GB of RAM for the Lambda function.
 
-### Updated Arch: container image, ECR, AWS infrastructure, CORS
+### 3.1. Updated Arch: container image, ECR, AWS infrastructure, CORS
 
 ```Mermaid
 ---
@@ -252,7 +250,7 @@ graph TD
     IAM Role/Execution Role --> bape-lambda
 ```
 
-### API Gateway or Lambda Function URL?
+### 3.2. API Gateway or Lambda Function URL?
 
 Looking into the Lambda Documentation the most prominently described options to invoke a Lambda fuction didn't even contain API Gateways.
 
@@ -269,7 +267,7 @@ Looking into the Lambda Documentation the most prominently described options to 
 
 For elaborate use cases requiring detailed customization options on all aspects of the API an API Gateway is the more robust solution. In this situation where we look for price efficiency and will we need to fit our app into limited resources (especially time out durations), it only makes sense to opt for a Lambda Function URL.
 
-### Hosting the front end from a public or private S3 bucket?
+### 3.3. Hosting the front end from a public or private S3 bucket?
 
 Setting the bucket to allow static webhosting requires the bucket to be publicly available.
 
@@ -277,7 +275,7 @@ I'm unsure about this decision. In the current situation I would accept having a
 
 If I want the bucket to be private but the index.html still accessible I could do this via ACLs, CloudFront or a bucket policy.
 
-### Memory and Performance
+### 3.4. Memory and Performance
 
 Since I didn't know exactly what compute and memory my image container would require, I ran the bape-lambda container another time and ran `docker stats`in another terminal window, where I could see that the app uses 100% of CPU at startup for a couple of seconds, during inference it reaches ~35% while processing a small mp3.
 `docker stats` lists Memory Limit as 7,654GiB of which I use less than 10%.
@@ -287,9 +285,11 @@ CONTAINER ID   NAME             CPU %     MEM USAGE / LIMIT     MEM %     NET I/
 1deceae19ac3   exciting_fermi   0.48%     597.9MiB / 7.654GiB   7.63%     3.04MB / 11.3kB   29.5MB / 2.61MB   38 
 ```
 
-### Drafting the CLI commands
+### 3.5. Drafting the CLI commands to set up the serverles infrastructure
 
 ***ECR/DOCKER***
+
+#### 3.5.1. ECR: Create Repository
 
 *Create a repo and set automatic image scanning when pushing to the registry:*
 ```zsh
@@ -304,93 +304,62 @@ Copy AccountID from response for next command or safe to variable.
 aws ecr get-login-password | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com
 ```
 
-*Tag and push the image to ECR*
+#### 3.5.2. DOCKER: Tag and push the image to ECR
 ```zsh
 docker tag bape-lambda:latest $ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/bape-ecr-repo:latest
 
 docker push $ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/bape-ecr-repo
 ```
+*safe the container image URI to variable*:
+`$BAPE_LATEST_CI_URI=$ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/bape-ecr-repo:latest`
+
+
+#### 3.5.3. IAM: Create trust and permisions policies (trust BAPE Lambda function and permit to pull from ECR and log to CloudWtach)
 
 ***IAM***
 
 An IAM role with the permissions to get the container image from ECR, assumable by the bape-lambda function, is required.
 
 1. Trust policy: enables Lambda Service to assume role
+    [Trust Policy](../src/bape-trust-policy.json)
 
-[Trust Policy](../src/bape-trust-policy.json)
-
-```src/trust-policy.json
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "BapeLambdaTrustPolicy",
-            "Effect": "Allow",
-            "Principal": {
-                "Service": "lambda.amazonaws.com"
-            },
-            "Action": "sts:AssumeRole"
-        }
-    ]
-}
-```
-
-2. Permission policy: enables pulling image from registry
-
-```src/bape_permissions-policy.json
-
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "BapeLambdaPermissionPolicy",
-            "Effect": "Allow",
-            "Action": [
-                "ecr:GetAuthorizationToken",
-                "ecr:BatchCheckLayerAvailability",
-                "ecr:GetDownloadUrlForLayer",
-                "ecr:BatchGetImage",
-                "logs:CreateLogGroup", 
-                "logs:CreateLogStream", 
-                "logs:PutLogEvents"
-            ],
-            "Resource": "arn:aws:ecr:<region>:<account-id>:repository/<repository-name>"
-        }
-    ]
-}
-```
+2. Permission policy: [Permission Policy](../src/bape-permissions-policy.json)
 
 Create this policy in IAM:
 
 ```zsh
 aws iam create-policy \
 --policy-name bape-permissions-policy \
---policy-document file://bape-permissions-policy.json
+--policy-document file://src/bape-permissions-policy.json
 ```
-should return BAPE_PERMPOL_ARN
+should return BAPE_PERMPOL_ARN --> saved to variable
+
 
 3. Create an Execution Role for the Lambda function
 
 ```zsh
 aws iam create-role \
 --role-name bape-lambda-exec-role \
---description execution role for bape-lambda-function \
+--description "execution role for bape-lambda-function" \
 --assume-role-policy-document file://src/bape-trust-policy.json
 ```
+saved ARN to $BAPE_EXECROLE_ARN
 
 …copy $BAPE_EXECROLE_ARN, and attach the permissions policy to the role:
 
 ```zsh
 aws iam attach-role-policy \
 --role-name bape-lambda-exec-role \
---policy-arn BAPE_PERMPOL_ARN \
+--policy-arn $BAPE_PERMPOL_ARN
 ```
+
+#### 3.5.4. Create Lambda function
 
 ***Lambda***
 
 Creating a function requires
 - a deployment package (container image and its URI or zip file conatining function code)
-  - code must be compatible with the target instruction set architecture of the function (`arm64` or `x86-64`, defaults to latter if not set)
+  - code must be compatible with the target instruction set architecture of the function (`arm64` or `x86_64`, defaults to `x86_64` if not set)
 - execution role
 
 
@@ -399,24 +368,201 @@ aws lambda create-function \
 --function-name bape-lambda-function \
 --package-type Image \
 --role $BAPE_EXECROLE_ARN \
---code <container image URI in ECR registry> \
+--code ImageUri=$BAPE_LATEST_CI_URI \
 --memory-size 2048 \
 --timeout 60 \
 #--ephemeral-storage 4096 \
---description Lambda function to run inference session against the BAPE onnx model
+--description "Lambda function to run inference session against the BAPE onnx model"
 ```
 
-Create the Function URL
+AWS was rejecting this command with:
+
+```zsh
+An error occurred (InvalidParameterValueException) when calling the CreateFunction operation: The image manifest, config or layer media type for the source image 609662023678.dkr.ecr.eu-central-1.amazonaws.com/bape-ecr-repo:latest is not supported.
+```
+
+A quick search on the Error made me [learn, that docker exports more modern image versions, including features not supported by AWS Lambda.](https://medium.com/@kvendingoldo/fix-invalidparametervalueexception-for-aws-lambda-docker-images-built-by-github-actions-4369468d52e0)
+
+
+So I had to strip these features (`--provenance=false --sbom=false`) from the build. `tag` the latest build and `push`again.
+
+```zsh
+docker build --platform linux/amd64 --provenance=false --sbom=false -t bape-lambda .
+
+docker tag bape-lambda:latest $ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/bape-ecr-repo:latest
+
+docker push $ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/bape-ecr-repo:latest
+```
+
+
+#### 3.5.5. Create the Function URL and debug `403: Forbidden`
 
 ```zsh
 aws lambda create-function-url-config \
---function-name my-bape-lambda-function \
---qualifier dev \
+--function-name bape-lambda-function \
 --auth-type NONE
-# --cors-config {AllowOrigins="https://example.com"} // optional
+#allow all origins
+--cors AllowOrigins="*"
 ```
----
----
+
+The resulting live URL responded with:
+```
+{"Message":"Forbidden. For troubleshooting Function URL authorization issues, see: https://docs.aws.amazon.com/lambda/latest/dg/urls-auth.html"}
+```
+
+Following the link I learned that the rescource-based poilcy of the Lambda function mus allow any Principal permission to `lambda:InvokeFunctionUrl` and `lambda:InvokeFunction`
+
+Adding the permissions via CLI:
+
+```zsh
+aws lambda add-permission \
+--function-name bape-lambda-function \
+--statement-id UrlPolicyInvokeURL \
+--action lambda:InvokeFunctionUrl \
+--principal "*" \
+--function-url-auth-type NONE
+
+aws lambda add-permission \
+--function-name bape-lambda-function \
+--statement-id UrlPolicyInvokeFunction \
+--action lambda:InvokeFunction \
+--principal "*" \
+--invoked-via-function-url
+```
+
+--> went from 403:Forbiden to 502:Bad Gateway - Internal Server Error.
+
+As I wanted to see the CloudWatch logs for the error, I realized faulty `bape-permissions-policy.json` because I could not see any Log Groups, when I tried `aws describe-log-groups`. 
+
+Edited the policy and created a new version:
+
+```zsh
+aws iam create-policy-version \
+--policy-arn $BAPE_PERMPOL_ARN \
+--policy-document file://src/bape-permissions-policy.json \
+--set-as-default
+```
+
+Triggered the Lambda Function URL again and tried again to get the logs but the server responded with a `502 Bad Gateway Internal server error`.
+
+- Was trying for least privilege: ecr auth token only for one specific repo
+
+- Decision: fix custom, least privilege policy or use aws managed policy?
+
+--> Fix custom policy to maintain least privilege strategy:
+
+Initially the policy allowed `ecr:GetAuthorizationToken` only for the specific `bape-ecr-repo`, which I changed to `*`.
+
+Also, I edited the policy to be structured in three different statements: `AllowECRAuth`, `AllowECRPull` and `AllowLogging`:
+
+[src/bape-permissions-policy.json](../src/bape-permissions-policy.json)
+
+Next, another `aws iam create-policy-version …` updated the policy in IAM.
+
+The next curl command still failed but succeeded to create a CloudWatch Log Group.
+```zsh
+❯ curl https://7ng4jbdvj2cd4s7ewneapjwaai0hyilw.lambda-url.eu-central-1.on.aws/
+
+Internal Server Error%
+
+❯ aws logs describe-log-groups
+
+{
+    "logGroups": [
+        {
+            "logGroupName": "/aws/lambda/bape-lambda-function",
+            "creationTime": 1771251906628,
+            "metricFilterCount": 0,
+            "arn": "arn:aws:logs:eu-central-1:609662023678:log-group:/aws/lambda/bape-lambda-function:*",
+            "storedBytes": 0,
+            "logGroupClass": "STANDARD",
+            "logGroupArn": "arn:aws:logs:eu-central-1:609662023678:log-group:/aws/lambda/bape-lambda-function"
+        }
+    ]
+}
+```
+![Cloud Watch Logging](screenshots/2026-02-16_CloudWatch_tail.png "CLoud Watch Lambda Function tail")
+
+
+#### 3.5.6. Debugging with CloudWatch
+
+Several findings in Logs:
+
+```zsh
+2026-02-16T15:41:45.743000+00:00 2026/02/16/[$LATEST]9747eac163aa44aca4abac629f3f4225 INFO lambda_web_adapter: app is not ready after 2000ms url=http://127.0.0.1:8080/
+```
+Dockerfile edit to increase the timeout of the lambda function:
+```Dockerfile
+ENV READINESS_CHECK_TIMEOUT=30
+```
+
+
+```zsh
+2026-02-16T15:41:46.000000+00:00 2026/02/16/[$LATEST]9747eac163aa44aca4abac629f3f4225 /var/lang/lib/python3.11/site-packages/joblib/_multiprocessing_helpers.py:44: UserWarning: [Errno 13] Permission denied.  joblib will operate in serial mode
+```
+For this I found two relevant sources:
+
+[Python multiprocessing: Permission denied](https://stackoverflow.com/questions/2009278/python-multiprocessing-permission-denied)
+[Note on Joblib with Docker](https://gist.github.com/harusametime/f8b05719d63b56148275997fc6f3d175)
+
+I had to redefine the `JOBLIB_TEMP_FOLDER`:
+
+```Dockerfile
+ENV JOBLIB_TEMP_FOLDER=/tmp
+```
+- Traceback: 
+
+```zsh
+2026-02-16T15:41:46.035000+00:00 2026/02/16/[$LATEST]9747eac163aa44aca4abac629f3f4225 Traceback (most recent call last):
+2026-02-16T15:41:46.035000+00:00 2026/02/16/[$LATEST]9747eac163aa44aca4abac629f3f4225 File "/var/lang/bin/uvicorn", line 6, in <module>
+2026-02-16T15:41:46.035000+00:00 2026/02/16/[$LATEST]9747eac163aa44aca4abac629f3f4225 sys.exit(main())
+```
+
+```zsh
+2026-02-16T15:41:46.040000+00:00 2026/02/16/[$LATEST]9747eac163aa44aca4abac629f3f4225 raise RuntimeError("cannot cache function %r: no locator available "
+(…)
+2026-02-16T15:41:46.040000+00:00 2026/02/16/[$LATEST]9747eac163aa44aca4abac629f3f4225 raise RuntimeError("cannot cache function %r: no locator available "
+```
+
+The error RuntimeError: `cannot cache function... no locator available comes from Numba.`
+
+Context: librosa uses numba to speed up audio math by compiling it into machine code on the fly (Just-In-Time compilation).
+The Problem: Once numba compiles a function, it tries to save a "cache" file to the disk so it doesn't have to compile it again next time.
+The Conflict: By default, it tries to write this cache inside the Python library folder (/var/lang/lib/...). In Lambda, that folder is read-only.
+The Result: numba panics because it can't find a writable "locator" to save its work, and it crashes your entire Uvicorn process.
+The Solution: Redirecting the Cache
+Just like we did with joblib, I need to tell numba that the only place it is allowed to "write" its cache is the /tmp folder.
+For this I redefine `ENV NUMBA_CACHE_DIR` in my Dockerfile:
+
+```Dockerfile
+ENV NUMBA_CACHE_DIR=/tmp
+```
+**Rebuilding, pushing the container image > rerun the lambda function url**
+
+Again, the startup failed and the joblib error reappeared. Also, even a timeout increase to 60 seconds wasn't enough:
+```zsh
+65752135-93e2-4cca-9fd7-635695f2b06a    Duration: 60000.00 ms   Billed Duration: 60000 ms       Memory Size: 2048 MB    Max Memory Used: 610 MB    Status: timeout
+```
+--> The new `READINESS_CHECK_TIMEOUT` variable was irrelevant because I set it to 60 seconds already when creating the Lambda function (see 3.5.4. Creating the Lambda function)
+
+Based on this I wanted to check if the ENV variables never reach the code or if `joblib` was running out of memory (though logs reported only 610MB of 2048MB max usage).
+
+
+***Check variable settings***
+
+- edit api.py to print the variables to make sure env variables are set correctly
+
+```api.py
+print(f"Debug: NUMBA_CACHE_DIR is {os.environ.get("NUMBA_CACHE_DIR")}")
+print(f"Debug: JOBLIB_TEMP_FOLDER is {os.environ.get("NUMBA_CACHE_DIR")}")
+```
+
+With these steps I learned about the "12-Factor App" principle, which states that configuration should be stored in the environment, while, here, I bake these variables into the Docker file. 
+In AWS it's an integrated option (required?) to define `--environment` variables, which is the standard way and allows to change variables without rebuilding the container image over and over.
+Also the reason why the new ``
+
+
+## X. Appendix
 
 ```Mermaid
 ---
@@ -476,3 +622,9 @@ graph TD
 IAM Role has:
 Trust Policy: WHO can assume the role
 Permissions Policy: WHAT can the role do (Services and Actions)?
+
+Lambda has:
+Resource-based policy
+
+AWS Orgainzations / IAM Identity Center:
+- Service Control Policies (What services can users access?)
