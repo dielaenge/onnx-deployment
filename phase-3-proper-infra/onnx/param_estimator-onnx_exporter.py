@@ -209,7 +209,7 @@ print(f"Input tensor shape is {final_4d_tensor.shape} and should be [1, 1, 16, 2
 
 # IV. Performing the export
 print("Step 4: Exporting the model to ONNX")
-EXPORTED_MODEL_PATH = "super_param_estimator.onnx" 
+EXPORTED_MODEL_PATH = "super_param_estimator_opset18.onnx" 
 
 torch.onnx.export(
     param_estimator_model,
@@ -217,7 +217,7 @@ torch.onnx.export(
     EXPORTED_MODEL_PATH,
     input_names=['input_spectogram'],
     output_names=['latent_vector', 'estimated_params', 'quantiles'],
-    #opset_version=18, #left undefined to use deafult/recommended
+    opset_version=18,
     dynamic_axes={ 
         'input_spectogram': {0 : 'batch_size'},
         'latent_vector' : {0 : 'batch_size'},
