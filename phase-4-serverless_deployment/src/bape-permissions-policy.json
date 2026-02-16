@@ -1,0 +1,26 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "BapeLambdaECRPermissionPolicy",
+            "Effect": "Allow",
+            "Action": [
+                "ecr:GetAuthorizationToken",
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:BatchGetImage"
+            ],
+            "Resource": "arn:aws:ecr:eu-central-1:609662023678:repository/bape-ecr-repo"
+        },
+        {
+            "Sid": "BapeLambdaLoggingPolicy",
+            "Effect":"Allow",
+            "Action":[
+                "logs:CreateLogGroup", 
+                "logs:CreateLogStream", 
+                "logs:PutLogEvents"
+            ],
+            "Resource":"arn:aws:ecr:eu-central-1:609662023678:*" 
+        }
+    ]
+}
