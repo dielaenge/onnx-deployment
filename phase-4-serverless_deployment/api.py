@@ -32,8 +32,8 @@ async def read_index():
     return FileResponse('static/index.html')
 
 # --- Model init (happens once at server startup) ---
-# was "onnx/super_param_estimator.onnx" locally
-MODEL_PATH = "onnx/super_param_estimator_opset18.onnx"
+# choose export version of model.pth
+MODEL_PATH = "onnx/super_param_estimator_opset18_2025-11-18_17-40-57.onnx"
 processor = None
 try:
     processor = AcousticModelProcessor(MODEL_PATH)
