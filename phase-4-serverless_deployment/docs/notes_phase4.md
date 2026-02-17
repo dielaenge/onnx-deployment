@@ -572,6 +572,84 @@ aws lambda update-function-configuration \
 Account was sandboxed to a 3008 MB quota, which could be increased by sending in a support ticket.
 For now, I use what I have and increase timeout even more, to 180.
 
+***SUCCESS***
+After a long startup time of ~16 sec the app loaded and porcessed uploaded and recorded input successfully.
+
+I shared the working Lambda Function URL with my collaborator who was very happy with the basic functionality and immediately started to ask questions and make suggestions, which I wrote down
+
+- Cold start duration: double penalty by 
+  1. Lambda pulling a 900MB image from ECR, creating a container and allocating memory
+  2. Once the container is live my Python code starts with loading heavy libraries (librosa, torch)
+
+  Quick Fix – Separation of concerns: 
+  1. load static assets from S3 / CloudFront --> frontend instantly available
+  2. Wait time occurs when file / recording is processed --> should feel more acceptable
+
+  More sustainable:
+  - look into provisioned concurrency (what is the price increase?)
+  - compare to Lambda SnapStart (not available for custom containers but important)
+
+- Update onnx model
+  - the resulting JSON displayed on the frontend triggered the question which exact weights were used for the onnx model
+  - I was able to quickly look into the `MODEL_WEIGHTS_PATH` variable in the `param_estimator-onnx_exporter.py and identify the exact model.pth version I used
+  - collaborators suspicion that it's not using the `2025-11-18-17-40-57` version were confirmed
+  - made edits (paths and model config) to [param_estimator-onnx_exporter.py](/phase-3-proper-infra/onnx/param_estimator-onnx_exporter.py) in order to export a new model
+
+  Next, I wanted to update the container image on ECR and rerun the Lambda Function URL with the adjusted onnx model, but failed: In the resulting JSON the model path was still the old and I learned that Lambda is not automatically pulling the new image in order to prevent broken pushs.
+  So my guess was that I needed to manually tell Lambda to pull the current image:
+
+```zsh
+aws lambda update-function-code \
+--function-name bape-lambda-function \
+--image-uri $ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/bape-ecr-repo:latest
+```
+  
+  But this also didn't fix the issue, so I checked my local build and ran
+
+```zsh
+docker run --platform linux/amd64 -p 9000:8080 bape-lambda:latest
+```
+
+  Running the app on localhost after still returned the old model path.
+  I needed to make sure docker was not reusing cached information for its build and I needed to start giving the build versions more descriptive name and most importantly changing names so I don't overwrite functional versions by accident.
+
+```zsh
+docker build --no-cache --platform linux/amd64 -t bape-lambda:2025-02-17-updated-onnx .
+```
+
+This built a new container image which used the corrected model path:
+
+```zsh
+❯ docker run --platform linux/amd64 bape-lambda:2025-02-17-updated-onnx cat api.py | grep "onnx/"
+MODEL_PATH = "onnx/super_param_estimator_opset18_2025-11-18_17-40-57.onnx"
+```
+
+So I tagged the new version, pushed it to ECR and told Lambda to update the function code:
+
+```zsh
+docker tag bape-lambda:2025-02-17-updated-onnx $ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/bape-ecr-repo:2025-02-17-updated-onnx
+
+docker push $ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/bape-ecr-repo:2025-02-17-updated-onnx
+
+aws lambda update-function-code \
+--function-name bape-lambda-function \
+--image-uri $ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/bape-ecr-repo:2025-02-17-updated-onnx
+```
+
+This threw an error I encountered already earlier: Docker builds the container image in the OCI Format which Lmbda doesn't support (see 3.5.4.)
+
+```zsh
+An error occurred (InvalidParameterValueException) when calling the UpdateFunctionCode operation: The image manifest, config or layer media type for the source image 609662023678.dkr.ecr.eu-central-1.amazonaws.com/bape-ecr-repo:2025-02-17-updated-onnx is not supported.
+```
+
+I needed to rebuild and strip the `provenance` and `sbom` feature:
+
+```zsh
+docker build --no-cache --platform linux/amd64 --provenance=false --sbom=false -t bape-lambda:2025-02-17-updated-onnx .
+```
+and push again to ECR.
+
+
 ## X. Appendix
 
 ```Mermaid

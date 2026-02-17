@@ -1,7 +1,7 @@
 import os
 
-print(f"Debug: NUMBA_CACHE_DIR is {os.environ.get("NUMBA_CACHE_DIR")}")
-print(f"Debug: JOBLIB_TEMP_FOLDER is {os.environ.get("NUMBA_CACHE_DIR")}")
+print(f"Debug: NUMBA_CACHE_DIR is {os.environ.get('NUMBA_CACHE_DIR')}")
+print(f"Debug: JOBLIB_TEMP_FOLDER is {os.environ.get('JOBLIB_TEMP_FOLDER')}")
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.staticfiles import StaticFiles
