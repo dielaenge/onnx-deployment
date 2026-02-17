@@ -131,19 +131,21 @@ print("`SuperParameterEstimator` class defined.")
 
 print("Step 2: Instantiating the `SuperParameterModel` class as `param_estimator_model`.")
 
-MODEL_WEIGHTS_PATH = "src/BAPE_src/results/param/2025-11-18_21-51-21/model.pth"
+MODEL_WEIGHTS_PATH = "src/BAPE_src/results/param/2025-11-18_17-40-57/model.pth"
 
 param_estimator_model = SuperParameterEstimator(
     encoder_state= None, #was: 'MODEL_WEIGHTS_PATH'
+    # took config from BAPE_src/results/param/2025-11-18_17-40-57/config.yaml
+    # might be necessary to change with updated weights
     freeze_encoder= False,
     reset_encoder= False,
     quantiles= [0.05, 0.5, 0.95],
-    p_drop= 0.3275,
+    p_drop= 0.3,
     estimator={
         "input_dim": 1024,
         "hidden_dim": 64,
         "num_blocks": 2,
-        "output_dim": 6,
+        "output_dim": 7,
         "output_act": None
         }
 )
@@ -158,7 +160,7 @@ print("Step 3: Loading pre-trained weights.")
 state_dict = torch.load(MODEL_WEIGHTS_PATH)
 
 # # The weights in the pth file might be nested under a key like 'model_state' or 'component_state'. Print the keys to see the structure
-# print(f"Keys loaded in state_dict: {state_dict.keys()}")
+#print(f"Keys loaded in state_dict: {state_dict.keys()}")
 
 # Loading the state_dict into the model. strict=True ensures only perfect matches
 param_estimator_model.load_state_dict(state_dict, strict=False)
@@ -209,7 +211,7 @@ print(f"Input tensor shape is {final_4d_tensor.shape} and should be [1, 1, 16, 2
 
 # IV. Performing the export
 print("Step 4: Exporting the model to ONNX")
-EXPORTED_MODEL_PATH = "super_param_estimator_opset18.onnx" 
+EXPORTED_MODEL_PATH = "super_param_estimator_opset18_2025-11-18_17-40-57.onnx" 
 
 torch.onnx.export(
     param_estimator_model,
