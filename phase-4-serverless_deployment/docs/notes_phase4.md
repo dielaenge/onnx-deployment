@@ -556,11 +556,21 @@ Based on this I wanted to check if the ENV variables never reach the code or if 
 print(f"Debug: NUMBA_CACHE_DIR is {os.environ.get("NUMBA_CACHE_DIR")}")
 print(f"Debug: JOBLIB_TEMP_FOLDER is {os.environ.get("NUMBA_CACHE_DIR")}")
 ```
+(-> tag and push container image afterwards)
 
 With these steps I learned about the "12-Factor App" principle, which states that configuration should be stored in the environment, while, here, I bake these variables into the Docker file. 
 In AWS it's an integrated option (required?) to define `--environment` variables, which is the standard way and allows to change variables without rebuilding the container image over and over.
-Also the reason why the new ``
 
+**Rerun with increased memory and timeout limit**
+```zsh
+aws lambda update-function-configuration \
+--function-name bape-lambda-function \
+--memory-size 4096 \
+--timeout 120
+```
+
+Account was sandboxed to a 3008 MB quota, which could be increased by sending in a support ticket.
+For now, I use what I have and increase timeout even more, to 180.
 
 ## X. Appendix
 
