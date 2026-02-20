@@ -636,10 +636,10 @@ graph LR
     end
 
     %% Frontend Flow:
-    Browser -- 1. calls CloudFront URL --> CFDistribution -- is OAC entity trusted by private bucket policy --> index
+    Browser -- 1. calls CloudFront URL --> CFDistribution -- 2. OAC entity trusted by private bucket policy --> index
 
     %% Backend Flow:
-    Browser -- 2. uploads/records input / calls Function URL --> LambdaFunctionURL --> LambdaFunction
+    Browser -- 3. uploads/records input via --> CFDistribution --> LambdaFunctionURL -- Function URL allows CORS from CloudFront URL--> LambdaFunction
     LambdaFunction -- 3. runs inference session / serves results --> Browser
 ```
 
@@ -686,9 +686,48 @@ aws cloudfront create-distribution \
 see [s3-bape-frontend-policy.json](src/s3-bape-frontend-policy.json)
 
 ```zsh
-aws s3api put-bucket-policy --bucket bape-lambda-static-frontend --policy file://src/s3-bape-frontend-policy.jso
+aws s3api put-bucket-policy --bucket bape-lambda-static-frontend --policy file://src/s3-bape-frontend-policy.json
 ```
-#### 3.6.1.X. More sustainable outlook:
+***Versioning the monolith***
+Since I'm updating the `index.html` of the functional Lambda monolith version, I'm tagging the container image on ecr with `:v1-monolith`, before updating the path. Also, I copy `index.html` from `static/` to `frontend/index.html` before updating the path and leave `static/index.html` as is so that it can still be referenced by `v1-monolith`.
+
+As the index.html cached on the CloudFront distribution needs an absolute path when triggering the `acou-vec/generate` function:
+
+```JS
+const response = await fetch('/acou-vec/generate', { method: 'POST', body: formData });
+```
+must become
+```JS
+const response = await fetch('https://7ng4jbdvj2cd4s7ewneapjwaai0hyilw.lambda-url.eu-central-1.on.aws/acou-vec/generate', { method: 'POST', body: formData });
+```
+
+***Copy static/index.html to the s3 bucket***
+```zsh
+aws s3 cp frontend/index.html s3://bape-lambda-static-frontend/index.html
+```
+
+Resulting CloudFront URL [https://d3ecws6p2nrrjd.cloudfront.net/](https://d3ecws6p2nrrjd.cloudfront.net/) // Frontend and backend separated
+
+
+Now, the frontend loads instantly and only the upload button triggers the Lambda Function URL, which makes the Upload seem to take forever, because it`s actually creating the container and booting the app and it's dependencies.
+
+The fact that this the Lambda function is reachable from here without explicitly giving Lambda any information about the CloudFront distribution, must worry us: 
+
+
+ In *3.5.5. Create the Function URL and debug `403: Forbidden`* I set the flag `--cors AllowOrigins="*"`, which is only acceptable during dev and test because it allows *any* actor to call the function from *anywhere*. 
+
+So I update the function-config:
+
+```zsh
+aws lambda update-function-url-config --function-name bape-lambda-function --cors "AllowOrigins=["https://d3ecws6p2nrrjd.cloudfront.net"],AllowMethods=["POST"]"
+```
+
+Now, the Lambda function is only accessible as
+
+- a monolith app (triggered frm the same source, the [Lambda Function URL](https://7ng4jbdvj2cd4s7ewneapjwaai0hyilw.lambda-url.eu-central-1.on.aws/))
+- a front- and backend-separated app (cross-source request only allowed from [CloudFront URL](https://d3ecws6p2nrrjd.cloudfront.net/))
+
+#### 3.6.1.X. More sustainable outlook: Provisioned Concurrency or Lambda SnapStarts?
   
   - look into provisioned concurrency (what is the price increase?):
   [Accurately estimating required provisioned concurrency for a function](https://docs.aws.amazon.com/lambda/latest/dg/provisioned-concurrency.html?sc_channel=sm&sc_campaign=Support&sc_publisher=REDDIT&sc_country=global&sc_geo=GLOBAL&sc_outcome=AWS%20Support&sc_content=Support&trk=Support&linkId=415993615#estimating-provisioned-concurrency)
