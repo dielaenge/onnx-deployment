@@ -5,6 +5,7 @@ import logging
 import base64
 
 import numpy as np
+import matplotlib.pyplot as plt
 import librosa
 import io
 import torch
@@ -83,6 +84,30 @@ def _normalize_audio_with_ffmpeg(audio_bytes: bytes, target_sr: int = 16000) -> 
         if os.path.exists(output_path):
             os.remove(output_path)
 
+# generating the spectrogram image 
+
+def generate_spectrogram_image(spectrogram_2d: np.ndarray) -> str:
+    """
+    Converts the 2D Spectrogram (a numpy array) into a Base64 encoded PNG string.
+    """
+    plt.figure(figsize=(10,4))
+
+    # Render the spectrogram using matplotlib's imshow instead of librosa's display
+    # imshow is lighter and doesn't require importing librosa.display
+    # origin='lower' ensures low frequencies are at the bottom
+    # cmap defines colormap, viridis is the default
+    plt.imshow(spectrogram_2d, aspect="auto", origin="lower", cmap="viridis")
+    plt.axis('off') # hide axis for cleaner look
+    plt.tight_layout(pad=0) #padding layout
+
+    #save the plot to memory buffer
+    buf=io.BytesIO()
+    plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
+    plt.close() #close plot to save memory
+
+    buf.seek(0) #start stream at position 0 of buffer
+    img_b64=base64.b64encode(buf.getvalue()).decode('utf-8')
+    return img_b64
 
 # --- Preprocessing class `MelSpectrogram` copied from [BAPE repository: bape/src/util/signals.py](https://github.com/philipp-goetz/bape/blob/7988f939d1c69301e31d322fecbbaa2a031ef3e1/src/util/signals.py) and adapted (see comments) for deployment---
 
@@ -165,6 +190,9 @@ def transform_audio_to_spectrogram(audio_bytes: bytes): #in phase 3 this was a p
         spectrogram_2d = melspec_preprocessor(audio_array) # returns spectogram using height of `n_mels`` and width of `trunc`
         print(f"Shape of spectogram_2d after shape preprocessing step 1: {spectrogram_2d.shape}")
 
+        # generate the spectrogram as b64 encoded png 
+        spectrogram_b64=generate_spectrogram_image(spectrogram_2d)
+
         # Step 2. Add batch size to the tensor at position 0; shape -> (1, 16, 2000) (bacth size, height, width)
         spectrogram_3d = np.expand_dims(spectrogram_2d, axis=0)
         print(f"Shape of spectogram_3d after shape preprocessing step 2: {spectrogram_3d.shape}")
@@ -173,11 +201,13 @@ def transform_audio_to_spectrogram(audio_bytes: bytes): #in phase 3 this was a p
         spectrogram_4d = np.expand_dims(spectrogram_3d, axis=1)
         print(f"Shape of spectogram_4d after shape preprocessing step 3: {spectrogram_4d.shape}")
         
-        # Return the final tensor
+        # Return the final tensor: Innference input as array (for model), as wav and png (for user) 
         # print(f"Data type is:{spectogram_4d.dtype}")
-        return spectrogram_4d, clean_wav_b64
+        return spectrogram_4d, clean_wav_b64, spectrogram_b64
     
     except Exception as e:
         logging.error(f"Spectrogram generation failed: {e}")
         raise e
     
+
+
