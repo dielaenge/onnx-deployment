@@ -2,6 +2,7 @@ import os
 import uuid
 import subprocess
 import logging
+import base64
 
 import numpy as np
 import librosa
@@ -34,7 +35,7 @@ def _normalize_audio_with_ffmpeg(audio_bytes: bytes, target_sr: int = 16000) -> 
         with open(input_path, "wb") as f:
             f.write(audio_bytes)
 
-        # 3. The FFmpeg Command
+        # 3. The FFmpeg convertion command
         # -y: Overwrite output
         # -i: Input file
         # -ar: Audio Rate (Resample to 16000)
@@ -56,8 +57,14 @@ def _normalize_audio_with_ffmpeg(audio_bytes: bytes, target_sr: int = 16000) -> 
         # 4. Load the clean WAV
         # We trust FFmpeg did the resampling, but passing sr=target_sr is a good safety check
         audio_array, _ = librosa.load(output_path, sr=TARGET_SR)
+
+        # 5. Get the cleaned WAV for the frontend ("r"eading as "b"inary)
+        with open(output_path, "rb") as f:
+            clean_wav_bytes=f.read()
+            #we don't want to store any data persistently, so we encode the wav to b64 so we can pass it into the JSON result
+            clean_wav_b64=clean_wav_bytes.b64encode(clean_wav_bytes).decode('utf-8')
         
-        return audio_array
+        return audio_array, clean_wav_b64
 
     except subprocess.CalledProcessError as e:
         # Capture FFmpeg stderr (Standard Error) for debugging
