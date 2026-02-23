@@ -70,3 +70,5 @@ debug_ssm*.sh
 *.png
 pro
 private
+*.m4a
+*.mp3
