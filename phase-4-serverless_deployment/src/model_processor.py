@@ -16,7 +16,7 @@ class AcousticModelProcessor:
         self.output_names = [output.name for output in self.sess.get_outputs()] # With the BAPE model, there are 2 output features to store => store the name for each feature in an array
         
         logger.info("Model initialized successfully.")
-        logger.info("Input Name: %s, Output Names: %s", self.input_name, self.output_names)
+        logger.info("Input Name: %s, Output Names: %s, Additional Outputs: preprocessed wav-input and spectrogram", self.input_name, self.output_names)
 
     def generate_vector(self, preprocessed_spectogram: np.ndarray) -> dict: #after model and inference session are initialized, a function to define the vector is set up which takes in the preprocessed audio from the model
         """Runs the ONNX inference session and returns a dictionary of all model outputs."""
