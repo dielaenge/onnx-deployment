@@ -1,19 +1,18 @@
+# Pulls a pre-built image from Docker Hub that contains the FFMPEG static binaries // edited bc johnvansickle source was too unreliable
+FROM mwader/static-ffmpeg:6.1 AS ffmpeg_source
+
 # Use the AWS managed base image for Python 3.11
 FROM public.ecr.aws/lambda/python:3.11
 
 # to make this compatible with my tooling, especially FastAPI, I use the aws lambda adapter
 COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt/extensions/lambda-adapter
 
+# copyy FFMPEG from the source image // much cleaner yum command after
+COPY --from=ffmpeg_source /ffmpeg /usr/bin/
+COPY --from=ffmpeg_source /ffprobe /usr/bin/
+
 #install tar xz unzip and libsndfile
 RUN yum install -y tar xz gzip unzip libsndfile \
-    # download ffmpeg build
-    && curl -L -o ffmpeg.tar.xz  https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz \
-    # unzip file
-    && tar -xf ffmpeg.tar.xz \
-    # move to /usr/bin/ffmpeg
-    && mv ffmpeg-*-amd64-static/ffmpeg /usr/bin/ffmpeg \
-    # remove anything ffmpeg from th root folder
-    && rm -rf ffmpeg* \
     && yum clean all
 
 # install CPU-only dependencies for torch to save space and time / download from explicit url to avoid dowonloading cuda backend; step separated from dependency installations to prevent conflicts
