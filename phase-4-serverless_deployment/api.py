@@ -1,7 +1,8 @@
 import os
 
-print(f"Debug: NUMBA_CACHE_DIR is {os.environ.get('NUMBA_CACHE_DIR')}")
-print(f"Debug: JOBLIB_TEMP_FOLDER is {os.environ.get('JOBLIB_TEMP_FOLDER')}")
+# Check environment variables of Lambda function
+#print(f"Debug: NUMBA_CACHE_DIR is {os.environ.get('NUMBA_CACHE_DIR')}")
+#print(f"Debug: JOBLIB_TEMP_FOLDER is {os.environ.get('JOBLIB_TEMP_FOLDER')}")
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -40,7 +41,6 @@ try:
 except Exception as e:
     logger.critical("FATAL: Could not load model at startup. Server will fail on requests. Error: %s", e)
     # note: No exit here as we just set processor = None
-
 
 #API ENDPOINTS
 @app.get("/health")
@@ -94,25 +94,25 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
     audio_b64 = audio_b64
 
     return {
-        "request_metadata": {
+        "request_metadata": {        
             "filename": audio_file.filename,
             "input duration": f"{input_duration} seconds",
             "processing_time_ms": round(processing_time_ms, 3)
         },
 
-        "model_metadata": {
-            "model_path": MODEL_PATH,
-            "onnx_input_shape": list(audio_spec.shape)
-        },
+        #"model_metadata": {
+        #    "model_path": MODEL_PATH,
+        #    "onnx_input_shape": list(audio_spec.shape)
+        #},
 
         "inference_results": {
 
-            "acoustic_fingerprint" : {
-                "shape": list(latent_vector.shape),
-                "values": latent_vector.flatten().tolist()[:10],
-                "comment": "Only first 10 values of vector for better readability"
-
-            },
+            #"acoustic_fingerprint" : {
+            #    "shape": list(latent_vector.shape),
+            #    "values": latent_vector.flatten().tolist()[:10],
+            #    "comment": "Only first 10 values of vector for better readability"
+#
+            #},
 
             "estimated_parameters": {
                 "shape": list(estimated_params.shape),
@@ -124,9 +124,9 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
                 "values": quantiles.flatten().tolist()
             },
 
-            "spectrogram_b64": spectrogram_b64,
+            #"spectrogram_b64": spectrogram_b64,
             
-            "audio_b64": audio_b64
+            #"audio_b64": audio_b64
             }
 
         }
