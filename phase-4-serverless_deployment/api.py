@@ -70,7 +70,7 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
 
     # 3. Preprocess audio input using modular function from audio_processor.py
     try:
-        audio_spec = transform_audio_to_spectrogram(contents)
+        audio_spec, audio_b64, spectrogram_b64, input_duration = transform_audio_to_spectrogram(contents)
     except Exception as e:
         logger.error("Audio preprocessing failed for %s: %s", audio_file.filename, e)
         raise HTTPException(status_code=400, detail=f"Audio preprocessing failed: {e}")
@@ -90,11 +90,13 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
     latent_vector = model_outputs['latent_vector']
     estimated_params = model_outputs['estimated_params']
     quantiles  = model_outputs['quantiles']
+    spectrogram_b64 = spectrogram_b64
+    audio_b64 = audio_b64
 
     return {
         "request_metadata": {
-            #"request_id": str(uuid.uuid4()),
             "filename": audio_file.filename,
+            "input duration": f"{input_duration} seconds",
             "processing_time_ms": round(processing_time_ms, 3)
         },
 
@@ -120,9 +122,14 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
             "quantiles": {
                 "shape": list(quantiles.shape),
                 "values": quantiles.flatten().tolist()
+            },
+
+            "spectrogram_b64": spectrogram_b64,
+            
+            "audio_b64": audio_b64
             }
+
         }
-    }
 
 # LAUNCH
 if __name__ == "__main__":
