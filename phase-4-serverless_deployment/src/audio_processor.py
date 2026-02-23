@@ -5,7 +5,12 @@ import logging
 import base64
 
 import numpy as np
+
+import matplotlib
+# explicitly set the Anti-Grain Geometry backend which is designed for headless servers
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+
 import librosa
 import io
 import torch
@@ -56,14 +61,14 @@ def _normalize_audio_with_ffmpeg(audio_bytes: bytes, target_sr: int = 16000) -> 
         subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         # 4. Load the clean WAV
-        # We trust FFmpeg did the resampling, but passing sr=target_sr is a good safety check
+        # FFmpeg did the resampling, but passing sr=target_sr is a good safety check
         audio_array, _ = librosa.load(output_path, sr=TARGET_SR)
 
         # 5. Get the cleaned WAV for the frontend ("r"eading as "b"inary)
         with open(output_path, "rb") as f:
             clean_wav_bytes=f.read()
             #we don't want to store any data persistently, so we encode the wav to b64 so we can pass it into the JSON result
-            clean_wav_b64=clean_wav_bytes.b64encode(clean_wav_bytes).decode('utf-8')
+            clean_wav_b64=base64.b64encode(clean_wav_bytes).decode('utf-8')
         
         return audio_array, clean_wav_b64
 
@@ -188,10 +193,15 @@ def transform_audio_to_spectrogram(audio_bytes: bytes): #in phase 3 this was a p
         
         # Step 1. Create 2D Mel Spectogram; shape -> (16, 2000) (height, width)
         spectrogram_2d = melspec_preprocessor(audio_array) # returns spectogram using height of `n_mels`` and width of `trunc`
+
+        input_duration=len(audio_array) / TARGET_SR
+        print(f"Input length is {input_duration} seconds.")
+
         print(f"Shape of spectogram_2d after shape preprocessing step 1: {spectrogram_2d.shape}")
 
         # generate the spectrogram as b64 encoded png 
         spectrogram_b64=generate_spectrogram_image(spectrogram_2d)
+        print(f"Spectrogram rendered and written to buffer.")
 
         # Step 2. Add batch size to the tensor at position 0; shape -> (1, 16, 2000) (bacth size, height, width)
         spectrogram_3d = np.expand_dims(spectrogram_2d, axis=0)
@@ -203,7 +213,7 @@ def transform_audio_to_spectrogram(audio_bytes: bytes): #in phase 3 this was a p
         
         # Return the final tensor: Innference input as array (for model), as wav and png (for user) 
         # print(f"Data type is:{spectogram_4d.dtype}")
-        return spectrogram_4d, clean_wav_b64, spectrogram_b64
+        return spectrogram_4d, clean_wav_b64, spectrogram_b64, input_duration
     
     except Exception as e:
         logging.error(f"Spectrogram generation failed: {e}")
