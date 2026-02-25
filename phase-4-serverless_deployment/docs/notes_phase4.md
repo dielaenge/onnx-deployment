@@ -285,7 +285,7 @@ CONTAINER ID   NAME             CPU %     MEM USAGE / LIMIT     MEM %     NET I/
 1deceae19ac3   exciting_fermi   0.48%     597.9MiB / 7.654GiB   7.63%     3.04MB / 11.3kB   29.5MB / 2.61MB   38 
 ```
 
-### 3.5. Drafting the CLI commands to set up the serverles infrastructure
+### 3.5. CLI: Setting up the serverles infrastructure
 
 ***ECR/DOCKER***
 
@@ -353,7 +353,7 @@ aws iam attach-role-policy \
 --policy-arn $BAPE_PERMPOL_ARN
 ```
 
-#### 3.5.4. Create Lambda function
+#### 3.5.4. LAMBDA: Create function
 
 ***Lambda***
 
@@ -395,7 +395,7 @@ docker push $ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/bape-ecr-repo:latest
 ```
 
 
-#### 3.5.5. Create the Function URL and debug `403: Forbidden`
+#### 3.5.5. LAMBDA: Create the Function URL and debug `403: Forbidden`
 
 ```zsh
 aws lambda create-function-url-config \
@@ -484,7 +484,7 @@ Internal Server Error%
 ![Cloud Watch Logging](screenshots/2026-02-16_CloudWatch_tail.png "CLoud Watch Lambda Function tail")
 
 
-#### 3.5.6. Debugging with CloudWatch
+#### 3.5.6. CLOUDWATCH: Debugging
 
 Several findings in Logs:
 
@@ -575,7 +575,7 @@ For now, I use what I have and increase timeout even more, to 180.
 ***SUCCESS***
 After a long startup time of ~16 sec the app loaded and porcessed uploaded and recorded input successfully.
 
-## 3.6. Feedback, requirement updates, quick fixes and next best actions
+### 3.6. Feedback, requirement updates, quick fixes and next best actions
 
 I shared the working Lambda Function URL with my collaborator who was very happy with the basic functionality and immediately started to ask questions and make suggestions, which I wrote down
 
@@ -597,146 +597,7 @@ I shared the working Lambda Function URL with my collaborator who was very happy
   - spectrogram which is generated at the beginning of our app and which serves as input for the inference session
   - preprocessed audio
 
-### 3.6.1. Cold start duration: 
-
-Double penalty by:
-  1. Lambda pulling a 900MB image from ECR, creating a container and allocating memory
-  2. Once the container is live my Python code starts with loading heavy libraries (librosa, torch)
-
-Quick Fix – Separation of concerns: 
-  1. load static assets from S3 / CloudFront --> frontend instantly available
-  2. Wait time occurs when file / recording is processed --> should feel more acceptable
-
-#### 3.6.1.1. Updated Traffic Flow
-
-```Mermaid
----
-title: Updated Traffic Flow with Separation of Concerns
----
-
-graph LR
-
-    subgraph Client
-    Browser[User]
-    end
-
-    subgraph Lambda
-        LambdaFunctionURL[Lambda Function URL]
-        LambdaFunction[Lambda Function]
-    end
-
-    subgraph CloudFront
-    CFDistribution[CloudFront Distribution]
-    end
-
-    subgraph S3
-        subgraph S3Bucket
-            index[static index.html frontend]
-        end
-    end
-
-    %% Frontend Flow:
-    Browser -- 1. calls CloudFront URL --> CFDistribution -- 2. OAC entity trusted by private bucket policy --> index
-
-    %% Backend Flow:
-    Browser -- 3. uploads/records input via --> CFDistribution --> LambdaFunctionURL -- Function URL allows CORS from CloudFront URL--> LambdaFunction
-    LambdaFunction -- 3. runs inference session / serves results --> Browser
-```
-
-#### 3.6.1.2. CloudFront considerations
-
-As I expereinced in phase 3 using self-signed certificates, browsers see HTTP as insecure context and only allow mic access via HTTPS as a security measure so that the mic signal can't be intercepted and decrypted by third parties. CLoudFront automatically handels HTTPS certifcates and thereby ensures a secure context, thus enabling `navigator.mediaDevices.getUserMedia`.
-
-I don't want to make my static project files or the bucket containing them public, so CloudFront will need permissions to access the private bucket. This will be established via an Origin Access Control entity which the resource-based policy of the bucket will grant permissions to `S3:getObjects`, maybe more.
-
-#### 3.6.1.3. CLI: Separation of concerns 
-Create
-1. the origin
-
-```zsh
-aws s3api create-bucket \
---bucket bape-lambda-static-frontend \
---create-bucket-configuration LocationConstraint=eu-central-1
-
-aws s3api put-public-access-block \
---bucket bape-lambda-static-frontend \
---public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
-```
-
-2. the identity
-
-```zsh
-aws cloudfront create-origin-access-control \
---origin-access-control-config Name=LambdaFrontendOAC,SigningProtocol=sigv4,SigningBehavior=always,OriginAccessControlOriginType=s3
-```
-
-3. the distribution
-
-This is a first step into Infrastructure as Code: since CLoudFront doesn't have a flag to identify the OAC, I need to pass in a JSON which also contains the setting of other flags necessary like `--origin-domain-name` or `--default-root-object`.
-
-See [BAPE Lambda distribution config](src/bape-lambda-distribution-config.json).
-
-```zsh
-aws cloudfront create-distribution \
---distribution-config file://src/bape-lambda-distribution-config.json
-```
-
-4. the resource-based bucket policy
-
-see [s3-bape-frontend-policy.json](src/s3-bape-frontend-policy.json)
-
-```zsh
-aws s3api put-bucket-policy --bucket bape-lambda-static-frontend --policy file://src/s3-bape-frontend-policy.json
-```
-***Versioning the monolith***
-Since I'm updating the `index.html` of the functional Lambda monolith version, I'm tagging the container image on ecr with `:v1-monolith`, before updating the path. Also, I copy `index.html` from `static/` to `frontend/index.html` before updating the path and leave `static/index.html` as is so that it can still be referenced by `v1-monolith`.
-
-As the index.html cached on the CloudFront distribution needs an absolute path when triggering the `acou-vec/generate` function:
-
-```JS
-const response = await fetch('/acou-vec/generate', { method: 'POST', body: formData });
-```
-must become
-```JS
-const response = await fetch('https://7ng4jbdvj2cd4s7ewneapjwaai0hyilw.lambda-url.eu-central-1.on.aws/acou-vec/generate', { method: 'POST', body: formData });
-```
-
-***Copy static/index.html to the s3 bucket***
-```zsh
-aws s3 cp frontend/index.html s3://bape-lambda-static-frontend/index.html
-```
-
-Resulting CloudFront URL [https://d3ecws6p2nrrjd.cloudfront.net/](https://d3ecws6p2nrrjd.cloudfront.net/) // Frontend and backend separated
-
-
-Now, the frontend loads instantly and only the upload button triggers the Lambda Function URL, which makes the Upload seem to take forever, because it`s actually creating the container and booting the app and it's dependencies.
-
-The fact that this the Lambda function is reachable from here without explicitly giving Lambda any information about the CloudFront distribution, must worry us: 
-
-
- In *3.5.5. Create the Function URL and debug `403: Forbidden`* I set the flag `--cors AllowOrigins="*"`, which is only acceptable during dev and test because it allows *any* actor to call the function from *anywhere*. 
-
-So I update the function-config:
-
-```zsh
-aws lambda update-function-url-config --function-name bape-lambda-function --cors "AllowOrigins=["https://d3ecws6p2nrrjd.cloudfront.net"],AllowMethods=["POST"]"
-```
-
-Now, the Lambda function is only accessible as
-
-- a monolith app (triggered frm the same source, the [Lambda Function URL](https://7ng4jbdvj2cd4s7ewneapjwaai0hyilw.lambda-url.eu-central-1.on.aws/))
-- a front- and backend-separated app (cross-source request only allowed from [CloudFront URL](https://d3ecws6p2nrrjd.cloudfront.net/))
-
-#### 3.6.1.X. More sustainable outlook: Provisioned Concurrency or Lambda SnapStarts?
-  
-  - look into provisioned concurrency (what is the price increase?):
-  [Accurately estimating required provisioned concurrency for a function](https://docs.aws.amazon.com/lambda/latest/dg/provisioned-concurrency.html?sc_channel=sm&sc_campaign=Support&sc_publisher=REDDIT&sc_country=global&sc_geo=GLOBAL&sc_outcome=AWS%20Support&sc_content=Support&trk=Support&linkId=415993615#estimating-provisioned-concurrency)
-
-  - compare to Lambda SnapStart (available for custom containers?):
-  [Improving startup performance with Lambda SnapStart](https://docs.aws.amazon.com/lambda/latest/dg/snapstart.html)
-    - supports Python 3.12 or later
-
-### 3.6.2. Update onnx model
+#### 3.6.1. Update onnx model
   - the resulting JSON displayed on the frontend triggered the question which exact weights were used for the onnx model
   - I was able to quickly look into the `MODEL_WEIGHTS_PATH` variable in the `param_estimator-onnx_exporter.py and identify the exact model.pth version I used
   - collaborators suspicion that it's not using the `2025-11-18-17-40-57` version were confirmed
@@ -799,14 +660,241 @@ and push again to ECR.
 
 Debugging successful — the Lambda function responds with a JSON referencing the correct onnx model file.
 
-### 3.6.3. Evolve to time-series processing
+#### 3.6.2. Cold start duration: 
 
-### 3.6.4. Make exact model inputs available
+Double penalty by:
+  1. Lambda pulling a 900MB image from ECR, creating a container and allocating memory
+  2. Once the container is live my Python code starts with loading heavy libraries (librosa, torch)
 
-### 3.6.5. Further learnings: versioning
+Quick Fix – Separation of concerns: 
+  1. load static assets from S3 / CloudFront --> frontend instantly available
+  2. Wait time occurs when file / recording is processed --> should feel more acceptable
+
+#### 3.6.2.1. Updated Traffic Flow
+
+```Mermaid
+---
+title: Updated Traffic Flow with Separation of Concerns
+---
+
+graph LR
+
+    subgraph Client
+    Browser[User]
+    end
+
+    subgraph Lambda
+        LambdaFunctionURL[Lambda Function URL]
+        LambdaFunction[Lambda Function]
+    end
+
+    subgraph CloudFront
+    CFDistribution[CloudFront Distribution]
+    end
+
+    subgraph S3
+        subgraph S3Bucket
+            index[static index.html frontend]
+        end
+    end
+
+    %% Frontend Flow:
+    Browser -- 1. calls CloudFront URL --> CFDistribution -- 2. OAC entity trusted by private bucket policy --> index
+
+    %% Backend Flow:
+    Browser -- 3. uploads/records input via --> CFDistribution --> LambdaFunctionURL -- Function URL allows CORS from CloudFront URL--> LambdaFunction
+    LambdaFunction -- 3. runs inference session / serves results --> Browser
+```
+
+##### 3.6.2.2. CloudFront considerations
+
+As I expereinced in phase 3 using self-signed certificates, browsers see HTTP as insecure context and only allow mic access via HTTPS as a security measure so that the mic signal can't be intercepted and decrypted by third parties. CLoudFront automatically handels HTTPS certifcates and thereby ensures a secure context, thus enabling `navigator.mediaDevices.getUserMedia`.
+
+I don't want to make my static project files or the bucket containing them public, so CloudFront will need permissions to access the private bucket. This will be established via an Origin Access Control entity which the resource-based policy of the bucket will grant permissions to `S3:getObjects`, maybe more.
+
+##### 3.6.2.3. CLI: Separation of concerns 
+Create
+1. the origin
+
+```zsh
+aws s3api create-bucket \
+--bucket bape-lambda-static-frontend \
+--create-bucket-configuration LocationConstraint=eu-central-1
+
+aws s3api put-public-access-block \
+--bucket bape-lambda-static-frontend \
+--public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+```
+
+2. the identity
+
+```zsh
+aws cloudfront create-origin-access-control \
+--origin-access-control-config Name=LambdaFrontendOAC,SigningProtocol=sigv4,SigningBehavior=always,OriginAccessControlOriginType=s3
+```
+
+3. the distribution
+
+This is a first step into Infrastructure as Code: since CLoudFront doesn't have a flag to identify the OAC, I need to pass in a JSON which also contains the setting of other flags necessary like `--origin-domain-name` or `--default-root-object`.
+
+See [BAPE Lambda distribution config](src/bape-lambda-distribution-config.json).
+
+```zsh
+aws cloudfront create-distribution \
+--distribution-config file://src/bape-lambda-distribution-config.json
+```
+
+4. the resource-based bucket policy
+
+see [s3-bape-frontend-policy.json](src/s3-bape-frontend-policy.json)
+
+```zsh
+aws s3api put-bucket-policy --bucket bape-lambda-static-frontend --policy file://src/s3-bape-frontend-policy.json
+```
+***Versioning the monolith***
+Since I'm updating the `index.html` of the functional Lambda monolith version, I'm tagging the container image on ecr with `:v1-monolith`, before updating the path. Also, I copy `index.html` from `static/` to `frontend/index.html` before updating the path and leave `static/index.html` as is so that it can still be referenced by `v1-monolith`.
+
+As the index.html cached on the CloudFront distribution needs an absolute path when triggering the `acou-vec/generate` function:
+
+```JS
+const response = await fetch('/acou-vec/generate', { method: 'POST', body: formData });
+```
+must become
+```JS
+const response = await fetch('https://7ng4jbdvj2cd4s7ewneapjwaai0hyilw.lambda-url.eu-central-1.on.aws/acou-vec/generate', { method: 'POST', body: formData });
+```
+
+***Copy static/index.html to the s3 bucket***
+```zsh
+aws s3 cp frontend/index.html s3://bape-lambda-static-frontend/index.html
+```
+
+Resulting CloudFront URL [https://d3ecws6p2nrrjd.cloudfront.net/](https://d3ecws6p2nrrjd.cloudfront.net/) // Frontend and backend separated
+
+
+Now, the frontend loads instantly and only the upload button triggers the Lambda Function URL, which makes the Upload seem to take forever, because it`s actually creating the container and booting the app and it's dependencies.
+
+The fact that this the Lambda function is reachable from here without explicitly giving Lambda any information about the CloudFront distribution, must worry us: 
+In *3.5.5. Create the Function URL and debug `403: Forbidden`* I set the flag `--cors AllowOrigins="*"`, which is only acceptable during dev and test because it allows *any* actor to call the function from *anywhere*. 
+
+So I update the function-config:
+
+```zsh
+aws lambda update-function-url-config --function-name bape-lambda-function --cors "AllowOrigins=["https://d3ecws6p2nrrjd.cloudfront.net"],AllowMethods=["POST"]"
+```
+
+Now, the Lambda function is deployed and accessible as
+
+- a monolith app (triggered frm the same source, the [Lambda Function URL](https://7ng4jbdvj2cd4s7ewneapjwaai0hyilw.lambda-url.eu-central-1.on.aws/))
+- a front- and backend-separated app (cross-source request only allowed from [CloudFront URL](https://d3ecws6p2nrrjd.cloudfront.net/))
+- triggered from anywhere else than the Lambda Function or CloudFornt URL, cross-origin requests are blocked by policy
+
+##### 3.6.2.X. More sustainable outlook: Provisioned Concurrency or Lambda SnapStarts?
+  
+  - look into provisioned concurrency (what is the price increase?):
+  [Accurately estimating required provisioned concurrency for a function](https://docs.aws.amazon.com/lambda/latest/dg/provisioned-concurrency.html?sc_channel=sm&sc_campaign=Support&sc_publisher=REDDIT&sc_country=global&sc_geo=GLOBAL&sc_outcome=AWS%20Support&sc_content=Support&trk=Support&linkId=415993615#estimating-provisioned-concurrency)
+
+  - compare to Lambda SnapStart (available for custom containers?):
+  [Improving startup performance with Lambda SnapStart](https://docs.aws.amazon.com/lambda/latest/dg/snapstart.html)
+    - supports Python 3.12 or later
+
+#### 3.6.3. Evolve to time-series processing
+
+Currently, my `src/audio_processor.py` takes the whole file uploaded or recorded and gives one result. 21 numbers describing one spatial setting of the recording, in 7 estimated parameters, each with a lower and an upper estimation range, adding up to 21 numbers.
+
+In order to make spatial changes, like the source of sound changing position, recoginzable, we need to slice recordings into smaller windows, which our function processes continually. A Sliding Window Processor.
+
+Before we write code, we must define the parameters of the slice.
+
+The Constraints:
+- Model Input: ONNX model expects a specific tensor shape `([1, 1, 16, 2000])`.
+- Sample Rate: 16,000 Hz.
+- Spectrogram Config: The `melspec_preprocessor` maps audio samples to spectrogram frames.
+
+The Design Questions (notes for Decision Log):
+
+Window Duration: How many seconds of audio correspond to one inference pass?
+- model takes a spectrogram of width 2000. hop size, the size of one analysis step/frame on the spectrogram, is 32.  
+  2000 frames * 32 samples/frame = 64000 samples. 64000 samples / 16000 samples/second = 4 seconds.
+
+- This determines the minimum chunk size the model processes at once.
+
+- When we move to the next window, an overlap creates a smoother graph but increases the compute time
+
+#### 3.6.4. Make exact model inputs available
+
+##### 3.6.4.1. Code and script edits
+
+- edited [`audio_processor.py`](src/audio_processor.py) to 
+  - import `matplotlib` and set the colormap to AGG
+  - encode the ffmpeg output bytes to Base64 and return the string along with `audio_array`, the input to `transform_audio_to_spectrogram`
+  - include another helper function `generate_spectrogram_image`, which uses `matplotlib` to render `spectrogram_2d`, a preprocessed state of the final model input `spectrogram_4d`, safe the rendering to a buffer instance, encode it also to Base64 and return `spectrogram_b64`
+  - augment the `transform_audio_to_spectrogram` function to return  `clean_wav_b64`, `spectrogram_b64`, `input_duration` in addition to `spectrogram_4d`.
+
+- edit api.py to expect the new outputs of `audio_processor.py`, JSON now also returns:
+  - input length
+  - spectrogram PNG as Base64 string
+  - input WAV as Base64 string
+
+- edit `frontend/index.html` (must be updated on S3) to include <audio> and <img> elements which display the decoded Base64 strings
+
+##### 3.6.4.2. Adding matplotlib
+When importing matplotlib an update of requirements.txt was necessary, but if I would compile my requirements.in on my machine the docker container would run into dependency errors. Therefor I ran a Docker container with the environment of our bape lambda container, mapped my project folder to a folder of the Docker container, compiled my requirements.in on the container instance and write the requirements.txt back to my hard drive:
+
+```zsh
+docker run --rm \
+-v $(pwd):/var/task \
+--entrypoint /bin/bash \
+public.ecr.aws/lambda/python:3.11 \
+-c "pip install pip-tools 'numpy<2.0.0' && pip-compile requirements.in"
+```
+
+When encountering several errors during container builds, I learned that build errors are often caused because no Python Wheels are found for package installation, leading to the attempt to compile from Source Code, but containers are designed to be light weight and don't have compilers on board.
+So I can do a manual audit of package versions in pypi:
+
+`contourpy` tried to install it's 1.3.3. version but it failed.
+
+1. I go to PyPI Contourpy 1.3.3 Files.
+2. I look for manylinux. I see they exist, but maybe they require manylinux_2_28.
+3. I then check other versions until I look into PyPI Contourpy 1.2.1 Files.
+4. I see version 1.2.1 has wheels for manylinux2014. This is an older standard.
+
+The Insight: Older standards have wider compatibility. By choosing a version that supports an older Manylinux standard, I am guaranteeing it will install without a compiler in a restricted environment like Lambda.
+
+##### 3.6.4.3 Script and frontend edits, pushing to ECR and GitHub
+
+With the backend starting up correctly with Matplotlib I was able to edit mostly the `audio_preprocessor.py` to
+- encode the read audio bytes from Upload/Recording to Base64 and return along with `spectrogram_4d`
+- add `generate_spectrogram_image()` helper function which uses matplotlib to rendert a spectrogram, safe it to a buffer and encode it toBase64
+  - call this function during `transform_audio_to_spectrogram()` to create the spectrogram image and add it to the return
+- add `input_duration` to return statement
+
+Further edits:
+- updated Dockerfile to source ffmpeg build from another container image instead of from a URL, which suddenly was unavailable during bug fixing
+  - this also came down to a cleaner Dockerfile
+- updated `model_processor.py`
+- update api.py to include the new return information from `audio_processor.py`
+- dependency wrangling when importing matplotlib: prevent Lambda from trying to compile packages from source not available as py wheels 
+  - find best compatible versions on pypi
+- edit frontend to display audio player and spectrogram
+
+To get the updated version running on the Lambda function I had to build a new updated image and make sure no old information is cached and that it's correctly tagged in ECR and pulled by the Lambda function.
+
+When this worked I pushed all changes to GiHub with dedicated commit meassges to the changed files. Afterwards I (accidentally) tagged the version as 2.0 and pushed it to GiHub. Unfortunately I had this tag already so it was overwritten. This wasn't a big problem since the version changes where minor from a cloud engineering perspective.
+
+#### 3.6.5. Further learnings: versioning
 I clearly felt an increase in speed while iterating the app and producing incremental improvements. Initially I planned on having 5 different deployment versions after all but at this point I wanted a tighter handle on versions and make them available for demonstration and comparisons in rertrospect/during job application process.
 
 I decided to keep different lambda versions alive, configure the CloudFront distribution's behaviours to point to multiple Lambda endpoints. Additionally I need to make use of Git tags.
+
+
+## 4. Phase finish
+
+### 4.1. What was done?
+
+### 4.2. What was learned?
+
+### 4.3. What's up next?
 
 ## X. Appendix
 

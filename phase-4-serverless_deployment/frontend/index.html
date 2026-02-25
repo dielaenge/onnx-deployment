@@ -130,7 +130,9 @@
                 resultArea.classList.remove('hidden');
                 jsonResult.textContent = JSON.stringify(data, null, 2);
                 statusText.innerText = "Success";
-            } catch (err) {
+            } 
+            
+            catch (err) {
                 statusText.innerText = "Failed";
                 console.error(err);
             }
