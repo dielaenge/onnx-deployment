@@ -26,6 +26,14 @@
                 "logs:PutLogEvents"
                 ],
             "Resource":"*"
+        },
+        {
+            "Sid": "AllowS3Upload",
+            "Effect":"Allow",
+            "Action":[
+                "s3:PutObject"
+                ],
+            "Resource":"arn:aws:s3:::bape-lambda-static-frontend/results/*"
         }
     ]
 }
