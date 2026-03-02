@@ -1,5 +1,6 @@
 import os
-
+import boto3
+from botocore.exceptions import ClientError
 # Check environment variables of Lambda function
 #print(f"Debug: NUMBA_CACHE_DIR is {os.environ.get('NUMBA_CACHE_DIR')}")
 #print(f"Debug: JOBLIB_TEMP_FOLDER is {os.environ.get('JOBLIB_TEMP_FOLDER')}")
@@ -27,6 +28,42 @@ app = FastAPI(title="BAPE API")
 
 # FRONTEND
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+# S3 BRIDGE
+def upload_artifact_and_get_presigned_url(file_bytes: bytes, object_key: str, content_type:str):
+    """
+    Upload a file to an S3 bucket, if upload succeeds, return presigned URL    
+    """
+
+    # set bucket as env var
+    bucket_name="bape-lambda-static-frontend"
+    # initialize S3 client
+    s3_client = boto3.client('s3')
+    # Safe object to S3
+    try:
+        # 1. put_object for raw bytes
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=object_key,
+            Body=file_bytes,
+            ContentType=content_type
+        )
+
+        # 2. Generate presigned URL
+        url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': bucket_name, 'Key': object_key},
+            # Presigned URL expires after 5 minutes
+            ExpiresIn=300,
+        )
+        return url
+
+    except Exception as e:
+        logger.error(f"S3 Bridge Error:{e}")
+        return None
+    
+# HEALTHCHECK ENDPOINT
 
 @app.get("/")
 async def read_index():
@@ -70,14 +107,46 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
 
     # 3. Preprocess audio input using modular function from audio_processor.py
     try:
-        audio_spec, audio_b64, spectrogram_b64, input_duration = transform_audio_to_spectrogram(contents)
+        audio_spec, clean_wav, spectrogram_png, input_duration = transform_audio_to_spectrogram(contents)
+    except Exception as e:
+        logger.error("Audio preprocessing failed for %s: %s", audio_file.filename, e)
+        raise HTTPException(status_code=400, detail=f"Audio preprocessing failed: {e}")
+    
+    logger.info("Preprocessed audio shape: %s", audio_spec.shape)
+    
+    # intialize a preprocessing session variable for naming files
+    session_id=str(uuid.uuid4())
+    wav_key=f"results/{session_id}_input.wav"
+    png_key=f"results/{session_id}_spectrogram.png"
+
+    try:
+        audio_spec, normalized_wav, spectrogram_png, input_duration = transform_audio_to_spectrogram(contents)
     except Exception as e:
         logger.error("Audio preprocessing failed for %s: %s", audio_file.filename, e)
         raise HTTPException(status_code=400, detail=f"Audio preprocessing failed: {e}")
     
     logger.info("Preprocessed audio shape: %s", audio_spec.shape)
 
-    # 4. Run inference and get results
+    # 4. Safe input to S3
+    # 4.1. Upload normalized audio to S3 and generate presigned URL
+    try:
+        wav_url=upload_artifact_and_get_presigned_url(normalized_wav, wav_key, "audio/wav")
+    
+    except ClientError as e:
+        logging.error(e)
+        return None
+
+    # 4.2. Upload to normalized audio to S3 and generate presigned URL
+    try:
+        png_url=upload_artifact_and_get_presigned_url(spectrogram_png, png_key, "image/png")
+    
+    except ClientError as e:
+        logging.error(e)
+        return None
+
+    print(f"Spectrogram available via {png_url}. Normalized wav input available via {wav_url}. These links will time out after 1 minute. The objects will be deleted in 24 hours.")
+    
+    # 5. Run inference and get results
     start_time = time.perf_counter()
     model_outputs = processor.generate_vector(audio_spec)
     end_time = time.perf_counter()
@@ -86,12 +155,10 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
     
     logger.info("Inference complete for %s. Time: %s.3f ms", audio_file.filename, processing_time_ms)
 
-    # 5. API respone (improved with BAPE integration)
-    latent_vector = model_outputs['latent_vector']
+    # 6. API respone (improved with BAPE integration)
+    #latent_vector = model_outputs['latent_vector']
     estimated_params = model_outputs['estimated_params']
     quantiles  = model_outputs['quantiles']
-    spectrogram_b64 = spectrogram_b64
-    audio_b64 = audio_b64
 
     return {
         "request_metadata": {        
@@ -100,20 +167,13 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
             "processing_time_ms": round(processing_time_ms, 3)
         },
 
-        #"model_metadata": {
-        #    "model_path": MODEL_PATH,
-        #    "onnx_input_shape": list(audio_spec.shape)
-        #},
+        "preprocessed_inputs": {
+          "png_url": png_url,
+          "wav_url": wav_url
+        },
 
         "inference_results": {
-
-            #"acoustic_fingerprint" : {
-            #    "shape": list(latent_vector.shape),
-            #    "values": latent_vector.flatten().tolist()[:10],
-            #    "comment": "Only first 10 values of vector for better readability"
-#
-            #},
-
+            
             "estimated_parameters": {
                 "shape": list(estimated_params.shape),
                 "values": estimated_params.flatten().tolist()
@@ -122,14 +182,9 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
             "quantiles": {
                 "shape": list(quantiles.shape),
                 "values": quantiles.flatten().tolist()
-            },
-
-            #"spectrogram_b64": spectrogram_b64,
-            
-            #"audio_b64": audio_b64
             }
-
         }
+    }
 
 # LAUNCH
 if __name__ == "__main__":
