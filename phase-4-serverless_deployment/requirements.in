@@ -26,3 +26,6 @@ aiofiles
 # Visualization
 matplotlib==3.8.2
 # from late 2023, very stable, and should work with Python 3.11
+
+# AWS Python SDK
+boto3

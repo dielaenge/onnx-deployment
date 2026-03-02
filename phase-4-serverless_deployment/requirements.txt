@@ -14,6 +14,12 @@ anyio==4.12.1
     # via starlette
 audioread==3.1.0
     # via librosa
+boto3==1.42.58
+    # via -r requirements.in
+botocore==1.42.58
+    # via
+    #   boto3
+    #   s3transfer
 certifi==2026.1.4
     # via requests
 cffi==2.0.0
@@ -48,6 +54,10 @@ idna==3.11
     # via
     #   anyio
     #   requests
+jmespath==1.1.0
+    # via
+    #   boto3
+    #   botocore
 joblib==1.5.3
     # via
     #   librosa
@@ -107,13 +117,17 @@ pydantic-core==2.41.5
 pyparsing==3.3.2
     # via matplotlib
 python-dateutil==2.9.0.post0
-    # via matplotlib
+    # via
+    #   botocore
+    #   matplotlib
 python-multipart==0.0.21
     # via -r requirements.in
 pyyaml==6.0.3
     # via -r requirements.in
 requests==2.32.5
     # via pooch
+s3transfer==0.16.0
+    # via boto3
 scikit-learn==1.3.2
     # via
     #   -r requirements.in
@@ -151,6 +165,8 @@ typing-extensions==4.15.0
 typing-inspection==0.4.2
     # via pydantic
 urllib3==2.6.3
-    # via requests
+    # via
+    #   botocore
+    #   requests
 uvicorn==0.40.0
     # via -r requirements.in
