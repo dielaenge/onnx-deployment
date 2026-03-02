@@ -116,15 +116,15 @@
             try {
                 const response = await fetch('https://7ng4jbdvj2cd4s7ewneapjwaai0hyilw.lambda-url.eu-central-1.on.aws/acou-vec/generate', { method: 'POST', body: formData });
                 const data = await response.json();
-                const result = data.inference_results;
+                const result = data.preprocessed_inputs;
 
                 // 1. Set the Audio Player source
-                if (result.audio_b64) {
-                    document.getElementById('audio-player').src = `data:audio/wav;base64,${result.audio_b64}`;
+                if (result.wav_url) {
+                    document.getElementById('audio-player').src=result.wav_url;
                 }
                 // 2. Set the Spectrogram Image source
-                if (result.spectrogram_b64) {
-                    document.getElementById('spectrogram-display').src = `data:image/png;base64,${result.spectrogram_b64}`;
+                if (result.png_url) {
+                    document.getElementById('spectrogram-display').src=result.png_url;
                 }
 
                 resultArea.classList.remove('hidden');
