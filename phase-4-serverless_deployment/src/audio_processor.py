@@ -66,11 +66,9 @@ def _normalize_audio_with_ffmpeg(audio_bytes: bytes, target_sr: int = 16000) -> 
 
         # 5. Get the cleaned WAV for the frontend ("r"eading as "b"inary)
         with open(output_path, "rb") as f:
-            clean_wav_bytes=f.read()
-            #we don't want to store any data persistently, so we encode the wav to b64 so we can pass it into the JSON result
-            clean_wav_b64=base64.b64encode(clean_wav_bytes).decode('utf-8')
-        
-        return audio_array, clean_wav_b64
+            clean_wav=f.read()
+            
+        return audio_array, clean_wav
 
     except subprocess.CalledProcessError as e:
         # Capture FFmpeg stderr (Standard Error) for debugging
@@ -109,10 +107,8 @@ def generate_spectrogram_image(spectrogram_2d: np.ndarray) -> str:
     buf=io.BytesIO()
     plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
     plt.close() #close plot to save memory
-
-    buf.seek(0) #start stream at position 0 of buffer
-    img_b64=base64.b64encode(buf.getvalue()).decode('utf-8')
-    return img_b64
+    spectrogram_png=buf.getvalue()
+    return spectrogram_png #returns png in bytes
 
 # --- Preprocessing class `MelSpectrogram` copied from [BAPE repository: bape/src/util/signals.py](https://github.com/philipp-goetz/bape/blob/7988f939d1c69301e31d322fecbbaa2a031ef3e1/src/util/signals.py) and adapted (see comments) for deployment---
 
@@ -183,7 +179,7 @@ def transform_audio_to_spectrogram(audio_bytes: bytes): #in phase 3 this was a p
 
     try:
         #we catch the additional output clean_wav_b64, which will be the preprocessed input
-        audio_array, clean_wav_b64 = _normalize_audio_with_ffmpeg(audio_bytes, target_sr=16000)
+        audio_array, clean_wav = _normalize_audio_with_ffmpeg(audio_bytes, target_sr=16000)
 
         #JUST COMMENTED OUT
         #audio_buffer = io.BytesIO(audio_array)
@@ -199,9 +195,9 @@ def transform_audio_to_spectrogram(audio_bytes: bytes): #in phase 3 this was a p
 
         print(f"Shape of spectogram_2d after shape preprocessing step 1: {spectrogram_2d.shape}")
 
-        # generate the spectrogram as b64 encoded png 
-        spectrogram_b64=generate_spectrogram_image(spectrogram_2d)
-        print(f"Spectrogram rendered and written to buffer.")
+        # spectrogram rendered in matplotlib as png / in bytes 
+        spectrogram_png=generate_spectrogram_image(spectrogram_2d)
+        print("Spectrogram rendered in matplotlib as png.")
 
         # Step 2. Add batch size to the tensor at position 0; shape -> (1, 16, 2000) (bacth size, height, width)
         spectrogram_3d = np.expand_dims(spectrogram_2d, axis=0)
@@ -213,7 +209,7 @@ def transform_audio_to_spectrogram(audio_bytes: bytes): #in phase 3 this was a p
         
         # Return the final tensor: Innference input as array (for model), as wav and png (for user) 
         # print(f"Data type is:{spectogram_4d.dtype}")
-        return spectrogram_4d, clean_wav_b64, spectrogram_b64, input_duration
+        return spectrogram_4d, clean_wav, spectrogram_png, input_duration
     
     except Exception as e:
         logging.error(f"Spectrogram generation failed: {e}")
