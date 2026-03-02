@@ -575,7 +575,7 @@ For now, I use what I have and increase timeout even more, to 180.
 ***SUCCESS***
 After a long startup time of ~16 sec the app loaded and porcessed uploaded and recorded input successfully.
 
-### 3.6. Feedback, requirement updates, quick fixes and next best actions
+### 3.6. Feedback, requirement updates, fixes and finishing edits
 
 I shared the working Lambda Function URL with my collaborator who was very happy with the basic functionality and immediately started to ask questions and make suggestions, which I wrote down
 
@@ -785,11 +785,11 @@ aws lambda update-function-url-config --function-name bape-lambda-function --cor
 
 Now, the Lambda function is deployed and accessible as
 
-- a monolith app (triggered frm the same source, the [Lambda Function URL](https://7ng4jbdvj2cd4s7ewneapjwaai0hyilw.lambda-url.eu-central-1.on.aws/))
-- a front- and backend-separated app (cross-source request only allowed from [CloudFront URL](https://d3ecws6p2nrrjd.cloudfront.net/))
+- (git tag: `phase-4.0-monolith`): monolith app (triggered frm the same source, the [Lambda Function URL](https://7ng4jbdvj2cd4s7ewneapjwaai0hyilw.lambda-url.eu-central-1.on.aws/))
+- (git tag: `phase-4.1-decoupled`)a front- and backend-separated app (cross-source request only allowed from [CloudFront URL](https://d3ecws6p2nrrjd.cloudfront.net/))
 - triggered from anywhere else than the Lambda Function or CloudFornt URL, cross-origin requests are blocked by policy
 
-##### 3.6.2.X. More sustainable outlook: Provisioned Concurrency or Lambda SnapStarts?
+##### 3.6.2.X. More sustainable outlook: Provisioned Concurrency, Lambda SnapStarts and other options
   
   - look into provisioned concurrency (what is the price increase?):
   [Accurately estimating required provisioned concurrency for a function](https://docs.aws.amazon.com/lambda/latest/dg/provisioned-concurrency.html?sc_channel=sm&sc_campaign=Support&sc_publisher=REDDIT&sc_country=global&sc_geo=GLOBAL&sc_outcome=AWS%20Support&sc_content=Support&trk=Support&linkId=415993615#estimating-provisioned-concurrency)
@@ -797,6 +797,7 @@ Now, the Lambda function is deployed and accessible as
   - compare to Lambda SnapStart (available for custom containers?):
   [Improving startup performance with Lambda SnapStart](https://docs.aws.amazon.com/lambda/latest/dg/snapstart.html)
     - supports Python 3.12 or later
+    - not viable for images >512 MB
 
 #### 3.6.3. Evolve to time-series processing
 
@@ -881,11 +882,314 @@ Further edits:
 To get the updated version running on the Lambda function I had to build a new updated image and make sure no old information is cached and that it's correctly tagged in ECR and pulled by the Lambda function.
 
 When this worked I pushed all changes to GiHub with dedicated commit meassges to the changed files. Afterwards I (accidentally) tagged the version as 2.0 and pushed it to GiHub. Unfortunately I had this tag already so it was overwritten. This wasn't a big problem since the version changes where minor from a cloud engineering perspective.
+As described in 3.6.5.1., I later tagged this committed version as `phase-4.2-audio-and-spectrogram-output`.
 
-#### 3.6.5. Further learnings: versioning
+#### 3.6.5. Further learnings and edits
+
+#### 3.6.5.1. Serverless Machine Learning Inference
+The resulting app is a major improvement in comparison to the phase-3-infrastructure in terms of cost and maintanance BUT even though the Lambda function itself delivers inference results instantaneously, the cold-start times are not acceptible for a frontend suggesting immediate or even real-time results.
+Fixing this with Provisioned Concurrency (with scheduled down and up times), setting up EventBridge events to ping the function regularly or considering Lambda Snap Starts, showed me the constraints of using Lambda functions for (near) real-time inference.
+The boot time of the Lambda function of 15-30 seconds is actually good but not adequate for a user experience suggesting to be "always on". In a setting where the user doesn't wait for the results, i.e. expecting them per mail, this would be much better, but as the app is perspectively meant to be a real-time inference machine, which still has acceptible cost, scaling and latency constraints, I plan on finding such a solution in phase 5.
+
+##### 3.6.5.2. Versioning and git Tagging
 I clearly felt an increase in speed while iterating the app and producing incremental improvements. Initially I planned on having 5 different deployment versions after all but at this point I wanted a tighter handle on versions and make them available for demonstration and comparisons in rertrospect/during job application process.
 
-I decided to keep different lambda versions alive, configure the CloudFront distribution's behaviours to point to multiple Lambda endpoints. Additionally I need to make use of Git tags.
+I used `git log …` and `git tag …` to get an overview of my git versioning history and copy the commit identifiers of versioning milestones, to which I added
+
+- phase-1.0-local
+- phase-2.0-naive
+- phase-3.0-infra
+- phase-4.0-monolith
+- phase-4.1-decoupled
+- phase-4.2.audio-and-spectrogram-output
+
+##### 3.6.5.3. Solving memory constraints with Pre-Signed URLs
+
+As the buffer of the Lambda function is limited to 6 MB, the function crashes already with smaller files like a 4MB mp3.
+Also, encoding the model WAV and spectrogram input in the backend, send it to the frontend and encode it with JavaScript puts a lot of overhead on the frontend.
+
+Storing the results in S3, configuring an adequate lifecycle policy and making them available via time-limited Pre-Signed URL
+- takes the load from the frontend
+- makes files instantaneously available
+
+For this, I will 
+- import boto3 to my api.py
+- create a function to upload artifacts to S3 and make them available via Pre-Signed URL, which will
+  - use the ready-made `generate_presigned_url()` and `put_object()` functions of boto3's S3 client
+  - use `uuid` to create distinctive object names
+- update index.html to source the links from the functions results and display them on the frontend
+
+At this point I need to think this out aloud:
+
+Right now my `audio_processor.py` defines the main function `transform_audio_to_spectrogram()` (which actually isn't named very well anymore since it's doing more) and helper functions and classes required by the main function.
+It reurns the spectrogram tensor, the normalized wav in Base64 encoding, the spectrogram as png encoded in Base64 and the input duration.
+
+In the `api.py` the asyncronous function `generate_vector_endpoint()` (also a suboptimal name I think) uses FastAPIs `UploadFile`, which are checked for the correct content type and then read into memory. Then the `transform_audio_to_spectrogram()` is called which returns the beforementioned results, one of which, `audio_spec` is the actual input for the onnx model, which is then invoked with `processor.generate_vector(audio_spec)`, an instance of the `AcousticModelProcessor` class (including the `generate_vector()` function) from `model_processor.py`.
+
+###### Where can we intercept the normalized audio and spectrogram png?
+
+Now the question is where we can intercept the cleaned WAV and spectrogram PNG – before / without Base64 encoding – upload it to S3 with a unique name and then generate a presigned URL and return it back.
+
+As this is not a part of audio preprocessing nor model processing our new function `upload_artifact_and_get_presigned_url()` will be defined in api.py
+It takes in the result of `generate_spectrogram_image()` which currently is `img_b64` and `clean_wav_b64`, the result of `_normalize_audio_with_ffmpeg`.
+
+###### Get rid of Base64 encoding
+
+I will change both functions to not decode the wav and png to Base64, like:
+
+```Python
+# audio_processor.py:
+# (…)
+def _normalize_audio_with_ffmpeg(…)
+#(…)
+        # 5. Get the cleaned WAV for the frontend ("r"eading as "b"inary)
+        with open(output_path, "rb") as f:
+            clean_wav=f.read()
+            
+        return audio_array, clean_wav
+
+# (…)
+def generate_spectrogram_image(spectrogram_2d: np.ndarray) -> str:
+    """
+    Converts the 2D Spectrogram (a numpy array) into a PNG.
+    """
+    plt.figure(figsize=(10,4))
+
+    # Render the spectrogram using matplotlib's imshow instead of librosa's display
+    # imshow is lighter and doesn't require importing librosa.display
+    # origin='lower' ensures low frequencies are at the bottom
+    # cmap defines colormap, viridis is the default
+    plt.imshow(spectrogram_2d, aspect="auto", origin="lower", cmap="viridis")
+    plt.axis('off') # hide axis for cleaner look
+    plt.tight_layout(pad=0) #padding layout
+
+    #save the plot to memory buffer
+    buf=io.BytesIO()
+    plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
+    plt.close() #close plot to save memory
+    spectrogram_png=buf.getvalue()
+    return spectrogram_png #returns png in bytes
+```
+
+then in the `transform_audio_to_spectrogram()` function in the same script, I update the variables:
+
+```Python
+# (…)
+        # spectrogram rendered in matplotlib as png / in bytes 
+        spectrogram_png=generate_spectrogram_image(spectrogram_2d)
+        print("Spectrogram rendered in matplotlib as png.")
+# (…)
+        # Return the final tensor: Innference input as array (for model), as wav and png (for user) 
+        # print(f"Data type is:{spectogram_4d.dtype}")
+        return spectrogram_4d, clean_wav, spectrogram_png, input_duration
+```
+
+###### Setting a lifecyle policy on the `bape-static-frontend` S3 bucket
+Meanwhile for lifecycle configurations to take place I need to create and set a poilcy:
+
+`src/lifecycle-configuration-policy.json`:
+
+```JSON
+{
+  "Rules": [
+    {
+      "Expiration": {
+        "Days": 1
+      },
+      "ID": "bape-result-lifecycle-policy",
+    }
+  ]
+}
+```
+
+0.000695 is a little more than a minute and I wonder hy I cant set minutes or seconds but only days!?
+Anyways… I put the bucket lifecycle policy:
+
+```zsh
+aws s3 api put-bucket-lifecycle-configuration \
+--bucket bape-lambda-static-frontend \
+--lifecycle-configuration file://src/lifecycle-configuration-policy.json
+```
+
+##### Add function to upload files and generate presigned URLS to `api.py`
+Now I build the new function in `api.py`:
+
+```Python
+(…)
+# added dependencies
+import boto3
+from botocore.exceptions import ClientError
+import uuid
+(…)
+
+# rough draft:
+# define function
+    # initialize s3 client
+    # put bytes to s3 (not upload file) as an object, named individually via uuid
+    # generate presigned url
+# call function on preprocessed audio and spectrogram
+
+def upload_artifact_and_get_presigned_url(file_bytes: bytes, object_key: str, content_type:str):
+    """
+    Upload a file to an S3 bucket, if upload succeeds, return presigned URL    
+    """
+
+    # set bucket as env var
+    bucket_name="bape-lambda-static-frontend"
+    # initialize S3 client
+    s3_client = boto3.client('s3')
+    # Safe object to S3
+    try:
+        # 1. put_object for raw bytes
+        s3_client.put_object(
+            Bucket=bucket_name,
+            Key=object_key,
+            Body=file_bytes,
+            ContentType=content_type
+        )
+
+        # 2. Generate presigned URL
+        url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': bucket_name, 'Key': object_key},
+            ExpiresIn=300,
+        )
+        return url
+
+    except Exception as e:
+        logger.error(f"S3 Bridge Error:{e}")
+        return None
+(…)
+```
+Later in api.py, in the `generate_vector_endpoint()` function, right before the inference happens, I call the function on the `clean_wav` and `spectrogram_png` output we redefined further up:
+
+```Python
+(…)
+async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
+(…)
+# 3. Preprocess audio input using modular function from audio_processor.py
+    # intialize a preprocessing session variable for naming files
+    session_id=str(uuid.uuid4())
+    wav_key=f"results/{session_id}_input.wav"
+    png_key=f"results/{session_id}_spectrogram.png"
+
+    try:
+        audio_spec, normalized_wav, spectrogram_png, input_duration = transform_audio_to_spectrogram(contents)
+    except Exception as e:
+        logger.error("Audio preprocessing failed for %s: %s", audio_file.filename, e)
+        raise HTTPException(status_code=400, detail=f"Audio preprocessing failed: {e}")
+    
+    logger.info("Preprocessed audio shape: %s", audio_spec.shape)
+
+# 4. Safe input to S3
+# 4.1. Upload normalized audio to S3 and generate presigned URL
+    try:
+        wav_url=upload_artifact_and_get_presigned_url(normalized_wav, wav_key, "audio/wav")
+    
+    except ClientError as e:
+        logging.error(e)
+        return None
+
+# 4.2. Upload to normalized audio to S3 and generate presigned URL
+    try:
+        png_url=upload_artifact_and_get_presigned_url(spectrogram_png, png_key, "image/png")
+    
+    except ClientError as e:
+        logging.error(e)
+        return None
+
+    print(f"Spectrogram available via {png_url}. Normalized wav input available via {wav_url}. These links will time out after 1 minute. The objects will be deleted in 24 hours.")
+```
+
+We can then include the png_url and wav_url to our API response further down:
+
+```Python
+    return {
+        "request_metadata": {        
+            "filename": audio_file.filename,
+            "input duration": f"{input_duration} seconds",
+            "processing_time_ms": round(processing_time_ms, 3)
+        },
+
+        "preprocessed_inputs": {
+          "png_url": png_url,
+          "wav_url": wav_url
+        },
+
+        "inference_results": {
+
+            "estimated_parameters": {
+                "shape": list(estimated_params.shape),
+                "values": estimated_params.flatten().tolist()
+            },
+
+            "quantiles": {
+                "shape": list(quantiles.shape),
+                "values": quantiles.flatten().tolist()
+            }            
+            }
+
+        }
+```
+
+In the frontend/index.html I refactor the JavaScript to source the audio and png from the presigned URLs isntead of decoding them from Base64 sent within the API's JSON response
+
+```JS
+// (…)
+            // append with file name
+            formData.append('audio_file', blob, filename);
+
+            try {
+                const response = await fetch('https://7ng4jbdvj2cd4s7ewneapjwaai0hyilw.lambda-url.eu-central-1.on.aws/acou-vec/generate', { method: 'POST', body: formData });
+                const data = await response.json();
+                const result = data.preprocessed_inputs;
+
+                // 1. Set the Audio Player source
+                if (result.wav_url) {
+                    document.getElementById('audio-player').src=str(wav_url);
+                }
+                // 2. Set the Spectrogram Image source
+                if (result.png_url) {
+                    document.getElementById('spectrogram-display').src=str(png_url);
+                }
+
+                resultArea.classList.remove('hidden');
+                jsonResult.textContent = JSON.stringify(data, null, 2);
+                statusText.innerText = "Success";
+            } 
+            
+            catch (err) {
+                statusText.innerText = "Failed";
+                console.error(err);
+            }
+        (…)
+```
+
+Just to not loose touch with where we are at: Assuming my edits are correct I would continue with:
+- commiting the changes to git
+- build a new docker container image and tag it
+- push it to ECR
+- update the Lambda function to pull the updated container
+
+  - how does the boto client use my AWS credentials?
+
+  As I don't do any manual credential exchange but use aws sso I export my temporary credentials as enironment variables like this:
+
+```zsh
+export ${aws configure export-credentials --format env}
+```
+I don't state my profile because it's already set in `direnv`.
+Now I can pass my AWS credentials as environment variables when running the image:
+
+```zsh
+docker run --platform linux/amd64 -p 9000:8080 \
+  -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
+  -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
+  -e AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN \
+  -e AWS_DEFAULT_REGION=eu-central-1 \
+  bape-lambda:latest
+```
+
 
 
 ## 4. Phase finish
