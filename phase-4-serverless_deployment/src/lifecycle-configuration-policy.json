@@ -1,0 +1,14 @@
+{
+    "Rules":[
+        {
+            "Expiration":{
+                "Days":1
+                },
+            "ID":"CleanUpResults",
+            "Filter":{
+                "Prefix":"results/"
+                },
+            "Status":"Enabled"
+        }
+    ]
+}
