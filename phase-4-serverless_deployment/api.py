@@ -15,7 +15,7 @@ import logging
 import uuid
 
 from src.model_processor import AcousticModelProcessor
-from src.audio_processor import transform_audio_to_spectrogram
+from src.audio_processor import preprocess_audio
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -89,7 +89,7 @@ def health_check():
         }
 
 @app.post("/acou-vec/generate")
-async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
+async def call_bape_api(audio_file: UploadFile = File(...)):
     
     if processor is None:
         raise HTTPException(status_code=503, detail="Service unavailable: Model not loaded.")
@@ -106,13 +106,6 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
 
 
     # 3. Preprocess audio input using modular function from audio_processor.py
-    try:
-        audio_spec, clean_wav, spectrogram_png, input_duration = transform_audio_to_spectrogram(contents)
-    except Exception as e:
-        logger.error("Audio preprocessing failed for %s: %s", audio_file.filename, e)
-        raise HTTPException(status_code=400, detail=f"Audio preprocessing failed: {e}")
-    
-    logger.info("Preprocessed audio shape: %s", audio_spec.shape)
     
     # intialize a preprocessing session variable for naming files
     session_id=str(uuid.uuid4())
@@ -120,12 +113,12 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
     png_key=f"results/{session_id}_spectrogram.png"
 
     try:
-        audio_spec, normalized_wav, spectrogram_png, input_duration = transform_audio_to_spectrogram(contents)
+        batch_inference_input, normalized_wav, spectrogram_png, timestamps, input_duration = preprocess_audio(contents)
     except Exception as e:
         logger.error("Audio preprocessing failed for %s: %s", audio_file.filename, e)
         raise HTTPException(status_code=400, detail=f"Audio preprocessing failed: {e}")
     
-    logger.info("Preprocessed audio shape: %s", audio_spec.shape)
+    logger.info("Preprocessed audio shape: %s", batch_inference_input.shape)
 
     # 4. Safe input to S3
     # 4.1. Upload normalized audio to S3 and generate presigned URL
@@ -144,26 +137,40 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
         logging.error(e)
         return None
 
-    print(f"Spectrogram available via {png_url}. Normalized wav input available via {wav_url}. These links will time out after 1 minute. The objects will be deleted in 24 hours.")
+    print(f"Spectrogram for entire input available via {png_url}. Normalized wav input available via {wav_url}. These links will time out after 1 minute. The objects will be deleted in 24 hours.")
     
     # 5. Run inference and get results
     start_time = time.perf_counter()
-    model_outputs = processor.generate_vector(audio_spec)
+    model_outputs = processor.run_inference(batch_inference_input)
+    # before sliding window input this returned one list of latent_vectors, quantiles and estimated_params; now this should return multiple of these, which we need to order
     end_time = time.perf_counter()
 
     processing_time_ms = (end_time - start_time) * 1000
     
     logger.info("Inference complete for %s. Time: %s.3f ms", audio_file.filename, processing_time_ms)
 
-    # 6. API respone (improved with BAPE integration)
-    #latent_vector = model_outputs['latent_vector']
-    estimated_params = model_outputs['estimated_params']
-    quantiles  = model_outputs['quantiles']
+    # 6. API respone: Map batch results to timestamps
+    batch_fingerprints = model_outputs['latent_vector'] # shape is (N,1024); was (1, 1024)
+    batch_estimated_params = model_outputs['estimated_params'] # shape is (N,7,3); was (1,7,3) for estimated_params
+    batch_quantiles  = model_outputs['quantiles'] # shape is (N,6,2); (1,6,2)
+
+    # map each timestampt to a result
+    timeline_of_results=[]
+
+    for timestamp_step, param_estimation_step, quantiles_step, fingerprint_step in zip(timestamps, batch_estimated_params, batch_quantiles, batch_fingerprints):
+        frame = {
+            "timestamp_step": timestamp_step,
+            "BAPEs": param_estimation_step.flatten().tolist(),
+            "quantiles": quantiles_step.flatten().tolist(),
+            "fingerprint": "processed - output tbd"
+        }
+        timeline_of_results.append(frame)
+
 
     return {
         "request_metadata": {        
             "filename": audio_file.filename,
-            "input duration": f"{input_duration} seconds",
+            "input_duration": input_duration,
             "processing_time_ms": round(processing_time_ms, 3)
         },
 
@@ -172,21 +179,9 @@ async def generate_vector_endpoint(audio_file: UploadFile = File(...)):
           "wav_url": wav_url
         },
 
-        "inference_results": {
-            
-            "estimated_parameters": {
-                "shape": list(estimated_params.shape),
-                "values": estimated_params.flatten().tolist()
-            },
-
-            "quantiles": {
-                "shape": list(quantiles.shape),
-                "values": quantiles.flatten().tolist()
-            }
-        }
+        "timeline_of_results": timeline_of_results
     }
 
 # LAUNCH
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
-    
