@@ -2,7 +2,6 @@ import os
 import uuid
 import subprocess
 import logging
-import base64
 
 import numpy as np
 
@@ -22,7 +21,7 @@ TARGET_SR = 16000 # target sample rate – placeholder value but a common one
 
 # Normalizing any input to the required wav format
 
-def _normalize_audio_with_ffmpeg(audio_bytes: bytes, target_sr: int = 16000) -> np.ndarray:
+def normalize_with_ffmpeg(audio_bytes: bytes, target_sr: int = 16000) -> np.ndarray:
     """
     Librosa/Soundfile cannot read compressed formats (M4A/WebM) 
     from memory streams. They need a real file on disk.
@@ -87,11 +86,43 @@ def _normalize_audio_with_ffmpeg(audio_bytes: bytes, target_sr: int = 16000) -> 
         if os.path.exists(output_path):
             os.remove(output_path)
 
+
+# slicing the audio input into 4 second chunks with 2 seconds overlap
+def slice_audio_to_chunks(audio_array: np.ndarray, sr=16000):
+    window_size = 4 * sr
+    stride_size = 2 * sr
+
+    slices = []
+    timestamps = []
+
+    for i in range(0, len(audio_array), stride_size):
+        # define slice size
+        start = i
+        end = i + window_size
+        chunk = audio_array[start:end]
+
+        # pad end of chunk if slice is smaller than 4 seconds
+        if len(chunk) < window_size:
+            padding_needed = window_size - len(chunk)
+            chunk = np.pad(chunk, (0, padding_needed), mode="constant")
+
+        # add chunk to list of slices
+        slices.append(chunk)
+
+        # add timestamps in seconds (i / sample rate)
+        timestamps.append(i / sr)
+
+        # prevent producing empty windows by breaking when the audio_array is exceeded
+        if end >= len(audio_array):
+            break
+        
+    return slices, timestamps
+
 # generating the spectrogram image 
 
 def generate_spectrogram_image(spectrogram_2d: np.ndarray) -> str:
     """
-    Converts the 2D Spectrogram (a numpy array) into a Base64 encoded PNG string.
+    Converts the 2D Spectrogram (a numpy array) into a PNG in bytes.
     """
     plt.figure(figsize=(10,4))
 
@@ -174,42 +205,48 @@ melspec_preprocessor = MelSpectrogram(
     trunc=2000
 )
 
-def transform_audio_to_spectrogram(audio_bytes: bytes): #in phase 3 this was a path but after adding the normalization function it expects raw audio bytes
-    """Loads raw audio bytes, normalizes them and returns a 4D spectogram tensor the ONNX model expects."""
+def preprocess_audio(audio_bytes: bytes): #in phase 3 this was a path but after adding the normalization function it expects raw audio bytes
+    """Preprocesses audio and returns normalized wav, spectrogram as array and png."""
 
     try:
-        #we catch the additional output clean_wav_b64, which will be the preprocessed input
-        audio_array, clean_wav = _normalize_audio_with_ffmpeg(audio_bytes, target_sr=16000)
-
-        #JUST COMMENTED OUT
-        #audio_buffer = io.BytesIO(audio_array)
-        #audio_data, _ = librosa.load(audio_buffer, sr=TARGET_SR, mono=True, dtype=np.float32) #librosa.load returns an np.ndarray / audio time series, here audio_data, and a sample rate `_`, ensure datatype is float32
+        #normalize and generate wav
+        audio_array, clean_wav = normalize_with_ffmpeg(audio_bytes, target_sr=16000)
         
-        #audio_data has to be adjusted for onnx runtime from (N,) to (1, 1, 16, 2000), this happens in 3 steps
+        input_duration = len(audio_array)/16000
+
+        # slice input
+        slices, timestamps = slice_audio_to_chunks(audio_array)
         
-        # Step 1. Create 2D Mel Spectogram; shape -> (16, 2000) (height, width)
-        spectrogram_2d = melspec_preprocessor(audio_array) # returns spectogram using height of `n_mels`` and width of `trunc`
+        # render entire spectrogran in matplotlib as png / in bytes 
+        full_spectrogram_2d=melspec_preprocessor(audio_array)
+        spectrogram_png=generate_spectrogram_image(full_spectrogram_2d)
+        print("Full spectrogram rendered in matplotlib as png.")
 
-        input_duration=len(audio_array) / TARGET_SR
-        print(f"Input length is {input_duration} seconds.")
-
-        print(f"Shape of spectogram_2d after shape preprocessing step 1: {spectrogram_2d.shape}")
-
-        # spectrogram rendered in matplotlib as png / in bytes 
-        spectrogram_png=generate_spectrogram_image(spectrogram_2d)
-        print("Spectrogram rendered in matplotlib as png.")
-
-        # Step 2. Add batch size to the tensor at position 0; shape -> (1, 16, 2000) (bacth size, height, width)
-        spectrogram_3d = np.expand_dims(spectrogram_2d, axis=0)
-        print(f"Shape of spectogram_3d after shape preprocessing step 2: {spectrogram_3d.shape}")
+        # create list of spectrograms
+        list_of_spectrograms=[]
+        # as slices is a list, loop through each slice
+        for slice in slices:
+            # create spectrogram for THIS slice using height of `n_mels`(16) and width of `trunc`(2000) --> shape: (16, 2000)
+            spectrogram_2d = melspec_preprocessor(slice)
+            # append spectrogram to list of spoectrograms
+            list_of_spectrograms.append(spectrogram_2d)
         
-        # Step 3. Add dimensions for channels at position 1; shape -> (1, 1, 16, 2000) (batch size, channels, height, width)
-        spectrogram_4d = np.expand_dims(spectrogram_3d, axis=1)
-        print(f"Shape of spectogram_4d after shape preprocessing step 3: {spectrogram_4d.shape}")
+        # list of spectrograms is a list and has `len()` but not `.shape`
+        # the contained spectrograms are arrays and have a shape of (16,2000)
+        #using `np.stack` on `list_of_spectrograms` takes all arrays from the list and stacks them into a batch array with the shape of (N,16,2000), whereas N is the number of spectrograms in 'list_of_spectrograms
+        batched_spectrograms_3d = np.stack(list_of_spectrograms, axis=0)
+        print(f"Shape of spectogram_3d after shape preprocessing step 2: {batched_spectrograms_3d.shape}. Expected shape: (N,16,2000). N = Batch Size, Height = 16, Width = 2000")
         
-        # Return the final tensor: Innference input as array (for model), as wav and png (for user) 
-        # print(f"Data type is:{spectogram_4d.dtype}")
-        return spectrogram_4d, clean_wav, spectrogram_png, input_duration
+        # Add fourth dimension for channels at position 1; shape -> (N, 1, 16, 2000) (batch size, channels, height, width)
+        batched_spectrograms_4d = np.expand_dims(batched_spectrograms_3d, axis=1)
+        print(f"Shape of spectogram_4d after shape preprocessing step 3: {batched_spectrograms_4d.shape}")
+        
+        # Return 
+        # - final tensor (batched_spectrograms_4d)
+        # - normalized wav (clean_wav)
+        # - spectrogram for entire input (spectrogram_png)
+        # - timestamps in seconds (timestamps) – necessary for correct visualization
+        return batched_spectrograms_4d, clean_wav, spectrogram_png, timestamps, input_duration
     
     except Exception as e:
         logging.error(f"Spectrogram generation failed: {e}")
