@@ -3,14 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BAPE | Acoustic AI</title>
+    <title>BAPE | Blind Acoustic Parameter Estimator</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
         .recording-glow { animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
     </style>
 </head>
+
 <body class="bg-[#020617] text-slate-200 min-h-screen flex flex-col items-center justify-center p-6 font-sans">
     <div class="max-w-xl w-full space-y-8 text-center">
         <div class="space-y-2">
@@ -19,8 +21,10 @@
         </div>
 
         <div class="glass rounded-[2rem] p-8 space-y-8 shadow-2xl">
-            <div id="status-text" class="text-xs font-bold text-blue-500 uppercase tracking-widest">System Ready</div>
-            
+            <div class="flex items-center justify-center space-x-3">
+                <div id="spinner" class="hidden h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <div id="status-text" class="text-xs font-bold text-blue-500 uppercase tracking-widest">System Ready</div>
+            </div>
             <!-- Mic Section -->
             <div class="flex flex-col items-center space-y-4">
                 <button id="mic-btn" class="h-24 w-24 rounded-full bg-slate-900 flex items-center justify-center transition-all duration-500 hover:border-blue-500/50 border-2 border-slate-800 shadow-inner">
@@ -56,6 +60,12 @@
     
                     <h3 class="text-xs font-bold uppercase text-slate-500">Input Spectrogram</h3>
                     <img id="spectrogram-display" class="rounded-lg border border-slate-700 w-full" />
+                </div>
+                <div class="space-y-2 mt-8">
+                    <h3 class="text-emerald-500 uppercase text-[10px] font-black tracking-widest">Acoustic Parameter Timeline</h3>
+                    <div id="chart-container" class="w-full h-80 bg-black/40 rounded-xl border border-emerald-500/10 relative overflow-hidden">
+                    <!-- D3.js injects SVG here -->
+                    </div>
                 </div>
                 <h3 class="text-emerald-500 uppercase text-[10px] font-black tracking-widest">Results</h3>
                 <pre id="json-result" class="text-[10px] bg-black/40 p-4 rounded-xl overflow-x-auto font-mono text-emerald-400 border border-emerald-500/10"></pre>
@@ -97,11 +107,98 @@
         fileInput.onchange = (e) => {
             if (e.target.files.length > 0) {
                 statusText.innerText = "Processing...";
+                document.getElementById('spinner').classList.remove('hidden');
                 upload(e.target.files[0]);
             }
         };
+        
+        // DATA VIZ
+        function drawChart(timeline) {
+            // 1. Data Prep: Extract the estimate at index[1] with confidence interval from index[0] to index[2]
+            const data = timeline.map(d => ({
+                time: d.timestamp_step,
+                low:  d.BAPEs[0], // Lower bound of 1st parameter confidence interval
+                val:  d.BAPEs[1], // Actual estimate of 1st parameter
+                high: d.BAPEs[2]  // Upper bound of 1st parameter confidence interval
+            }));
 
-        // --- SHARED UPLOAD FUNCTION ---
+            const container = document.getElementById('chart-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            // 2. Clear previous chart
+            d3.select("#chart-container").selectAll("*").remove();
+
+            const svg = d3.select("#chart-container")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+            // 3. Define Scales (Scales translate data values, the INPUT DOMIAN, to screen values, the OUTPUT RANGE)
+
+            // x-axis:time
+            const xScale = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.time)]) // INPUT from 0 max value from d.time
+                .range([50, width - 20]); // OUTPUT starting at 50px and ending 20px before max width
+
+            // y-axis: estimate
+            const yScale = d3.scaleLinear()
+                .domain([
+                    d3.min(data, d => d.low) * 0.9, // INPUT MIN is lowest lower bound value (d.low); scale by 0.9 to add space beneath
+                    d3.max(data, d => d.high) * 1.1 // INPUT MX is highest upper bound value (d.high); scale by 1.1 to add space above
+                ])
+                .range([height - 30, 20]); // OUTPUT starting at (max height - 30px), ending at 20px height
+
+
+            
+            // define an area chart with .low and .high, and a line chart with the actual .val
+            
+            // create area generator
+            const areaGenerator = d3.area()
+            .x(d => xScale(d.time)) //get x-value from time step
+            .y0(d => yScale(d.low)) //get lower bound confidence
+            .y1(d => yScale(d.high)) //get upper bound confidence
+            //optional line-smoothing
+            .curve(d3.curveMonotoneX); 
+
+            //   create line generator
+            const lineGenerator = d3.line()
+            .x(d => xScale(d.time)) // take timestampe_step values and scale to x-axis
+            .y(d => yScale(d.val)) // take BAPEs value at index[1]
+            //optional line-smoothing
+            .curve(d3.curveMonotoneX);
+
+
+            // Layer the visualization
+
+            // append grid/axes (background)
+            // x-axis at bottom
+            svg.append("g")
+                .attr("transform", `translate(0, ${height - 30})`) // place at bottom
+                .call(d3.axisBottom(xScale)) // Constructs a new bottom-oriented axis generator for the given scale, with empty tick arguments, a tick size of 6 and padding of 3
+            
+            // y-axis to the left
+            svg.append("g")
+                .attr("transform", `translate(50 ,0)`) // move right to keep margin
+                .call(d3.axisLeft(yScale)) // Constructs a new bottom-oriented axis generator for the given scale, with empty tick arguments, a tick size of 6 and padding of 3
+
+            // append area (middleground)
+            svg.append("path")
+                .datum(data) // ENTIRE input array available to drawChart is bound to path
+                .attr("fill", "rgba(16, 185, 129, 0.2)") // fill area with opacity
+                .attr("stroke", "none") // area doesn't have an outline
+                .attr("d", areaGenerator) // calculate the path of the area using the areaGenerator
+
+            // append line (foreground)
+            svg.append("path")
+                .datum(data)
+                .attr("fill", "none")
+                .attr("stroke", "#10b981") // Solid Emerald
+                .attr("stroke-width", 2)
+                .attr("d", lineGenerator);
+        }
+
+        // --- MAIN LOGIC ---
         async function upload(blob) {
             const formData = new FormData();
 
@@ -113,26 +210,40 @@
             // append with file name
             formData.append('audio_file', blob, filename);
 
+            // Simulating a progress timer if it's a cold start
+            let progressSeconds = 0;
+            const progressInterval = setInterval(() => {
+                progressSeconds++;
+                if (progressSeconds === 10) statusText.innerText = "Cold Start… Waking up Inference Engine...";
+                if (progressSeconds === 16) statusText.innerText = "Loading ONNX Model...";
+                if (progressSeconds === 22) statusText.innerText = "Normalizing Audio via FFmpeg...";
+                if (progressSeconds === 26) statusText.innerText = "Kannst du arbeiten?";
+                if (progressSeconds === 28) statusText.innerText = "Running Acoustic Inference...";
+                }, 1000);
+
             try {
                 const response = await fetch('https://7ng4jbdvj2cd4s7ewneapjwaai0hyilw.lambda-url.eu-central-1.on.aws/acou-vec/generate', { method: 'POST', body: formData });
                 const data = await response.json();
-                const result = data.preprocessed_inputs;
+                const presigned_urls = data.preprocessed_inputs;
 
                 // 1. Set the Audio Player source
-                if (result.wav_url) {
-                    document.getElementById('audio-player').src=result.wav_url;
+                if (presigned_urls.wav_url) {
+                    document.getElementById('audio-player').src=presigned_urls.wav_url;
                 }
                 // 2. Set the Spectrogram Image source
-                if (result.png_url) {
-                    document.getElementById('spectrogram-display').src=result.png_url;
+                if (presigned_urls.png_url) {
+                    document.getElementById('spectrogram-display').src=presigned_urls.png_url;
                 }
+                
+                // Clear the timer once the real data arrives
+                clearInterval(progressInterval);
+                document.getElementById('spinner').classList.add('hidden');
 
+                drawChart(data.timeline_of_results)
                 resultArea.classList.remove('hidden');
                 jsonResult.textContent = JSON.stringify(data, null, 2);
-                statusText.innerText = "Success";
-            } 
-            
-            catch (err) {
+                statusText.innerText = "Analysis Complete";
+            } catch (err) {
                 statusText.innerText = "Failed";
                 console.error(err);
             }
