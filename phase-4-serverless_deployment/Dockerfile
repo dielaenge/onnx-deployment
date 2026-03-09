@@ -25,7 +25,6 @@ WORKDIR ${LAMBDA_TASK_ROOT}
 
 # copy app
 COPY onnx/ ${LAMBDA_TASK_ROOT}/onnx
-COPY static/ ${LAMBDA_TASK_ROOT}/static
 COPY src/ ${LAMBDA_TASK_ROOT}/src
 COPY api.py ${LAMBDA_TASK_ROOT}
 
