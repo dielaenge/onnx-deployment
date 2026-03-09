@@ -6,8 +6,6 @@ from botocore.exceptions import ClientError
 #print(f"Debug: JOBLIB_TEMP_FOLDER is {os.environ.get('JOBLIB_TEMP_FOLDER')}")
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 import uvicorn
 import time
 import json
@@ -25,10 +23,6 @@ logging.basicConfig(
 logger = logging.getLogger("API")
 
 app = FastAPI(title="BAPE API")
-
-# FRONTEND
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
 
 # S3 BRIDGE
 def upload_artifact_and_get_presigned_url(file_bytes: bytes, object_key: str, content_type:str):
@@ -63,11 +57,6 @@ def upload_artifact_and_get_presigned_url(file_bytes: bytes, object_key: str, co
         logger.error(f"S3 Bridge Error:{e}")
         return None
     
-# HEALTHCHECK ENDPOINT
-
-@app.get("/")
-async def read_index():
-    return FileResponse('static/index.html')
 
 # --- Model init (happens once at server startup) ---
 # choose export version of model.pth
@@ -80,6 +69,8 @@ except Exception as e:
     # note: No exit here as we just set processor = None
 
 #API ENDPOINTS
+
+#HEALTHCHECK ENDPOINT
 @app.get("/health")
 def health_check():
     """Healthcheck endpoint."""
