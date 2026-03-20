@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BAPE | Blind Acoustic Parameter Estimator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .recording-glow { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+    </style>
+</head>
+
+<body class="bg-[#020617] text-slate-200 min-h-screen flex flex-col items-center justify-center p-6 font-sans">
+    <div class="max-w-xl w-full space-y-8 text-center">
+        <div class="space-y-2">
+            <h1 class="text-6xl font-black tracking-tighter bg-gradient-to-br from-white to-slate-500 bg-clip-text text-transparent italic">BAPE</h1>
+            <p class="text-slate-500 text-xs uppercase tracking-[0.3em] font-bold">Blind Acoustic Parameter Estimator</p>
+        </div>
+
+        <div class="glass rounded-[2rem] p-8 space-y-8 shadow-2xl">
+            <div class="flex items-center justify-center space-x-3">
+                <div id="spinner" class="hidden h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <div id="status-text" class="text-xs font-bold text-blue-500 uppercase tracking-widest">System Ready</div>
+            </div>
+            <!-- Mic Section -->
+            <div class="flex flex-col items-center space-y-4">
+                <button id="mic-btn" class="h-24 w-24 rounded-full bg-slate-900 flex items-center justify-center transition-all duration-500 hover:border-blue-500/50 border-2 border-slate-800 shadow-inner">
+                    <svg id="mic-icon" xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 1v11m0 0a4 4 0 004-4V5a4 4 0 00-8 0v3a4 4 0 004 4z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 10v1a7 7 0 01-14 0v-1m10 8a3 3 0 11-6 0" />
+                    </svg>
+                </button>
+                <p class="text-slate-500 text-sm">Tap microphone to record</p>
+            </div>
+
+            <div class="flex items-center space-x-4">
+                <div class="h-px bg-slate-800 flex-grow"></div>
+                <span class="text-slate-600 text-xs font-bold uppercase">or</span>
+                <div class="h-px bg-slate-800 flex-grow"></div>
+            </div>
+
+            <!-- File Upload Section -->
+            <div class="flex justify-center">
+                <label class="cursor-pointer group">
+                    <input type="file" id="file-input" class="hidden" accept="audio/*">
+                    <div class="px-6 py-3 rounded-full bg-slate-800 text-slate-300 text-sm font-semibold group-hover:bg-blue-600 group-hover:text-white transition-all">
+                        Upload Audio File
+                    </div>
+                </label>
+            </div>
+
+            <!-- Result Area -->
+            <div id="result-area" class="hidden space-y-4 pt-4 border-t border-slate-800 text-left">
+                <div id="visual-verification" class="space-y-4">
+                    <h3 class="text-xs font-bold uppercase text-slate-500">Preprocessed Input (16kHz Mono, wav)</h3>
+                    <audio id="audio-player" controls class="w-full"></audio>
+    
+                    <h3 class="text-xs font-bold uppercase text-slate-500">Input Spectrogram</h3>
+                    <img id="spectrogram-display" class="rounded-lg border border-slate-700 w-full" />
+                </div>
+                <div class="space-y-2 mt-8">
+                    <h3 class="text-emerald-500 uppercase text-[10px] font-black tracking-widest">Acoustic Parameter Timeline</h3>
+                    <div class="flex flex-col lg:flex-row gap-4">
+                        <!-- D3 Chart -->
+                        <div id="chart-container" class="lg:w-3/4 h-80 ...">
+                            <!-- D3 SVG injected here-->
+                        </div>
+    
+                        <!-- chart legend -->
+                        <div id="chart-legend" class="lg:w-1/4 grid grid-cols-2 lg:grid-cols-1 gap-2 bg-slate-900/50 p-4 rounded-xl max-h-80 overflow-y-auto">
+                            <!-- JS buttons injected here -->
+                        </div>
+                    </div>
+                </div>
+                <details class="group bg-black/40 rounded-xl border border-emerald-500/10 overflow-hidden">
+                    <summary class="p-4 cursor-pointer font-bold text-xs uppercase tracking-widest text-emerald-500 hover:bg-emerald-500/5 transition-colors">
+                        Show Raw JSON Data
+                    </summary>
+                    <pre id="json-result" class="p-4 text-[10px] font-mono overflow-x-auto text-emerald-400/80"></pre>
+                </details>
+            </div>
+        </div>
+        <!-- ABOUT -->
+        <div class="fixed bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 opacity-50 hover:opacity-100 transition-opacity cursor-pointer animate-bounce" onclick="document.getElementById('about-section').scrollIntoView({behavior: 'smooth'})">
+            <span class="text-[10px] uppercase tracking-[0.3em] font-bold text-slate-500">About the Project</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+            </svg>
+        </div>
+    </div>
+    <!-- About Section (Below the Fold) -->
+<section id="about-section" class="min-h-screen bg-slate-950 text-slate-300 p-8 lg:p-24 flex flex-col items-center justify-center border-t border-slate-900 relative z-10">
+    <div class="max-w-3xl w-full space-y-12">
+        
+        <!-- Header -->
+        <div class="space-y-4 text-center">
+            <h2 class="text-4xl font-black tracking-tighter text-white">Blind Acoustic Parameter Estimation</h2>
+            <div class="h-1 w-20 bg-emerald-500 mx-auto rounded-full"></div>
+            <p class="text-xl text-slate-400 font-light italic">"Hearing the room."</p>
+        </div>
+
+        <!-- Grid Content -->
+        <div class="grid md:grid-cols-2 gap-12">
+            <div class="space-y-4">
+                <h3 class="text-xs font-bold uppercase tracking-widest text-emerald-500">Research Ojective</h3>
+                <p class="leading-relaxed text-sm text-slate-400">
+                    [PLACEHOLDER: Abstract. Describe goal of extracting T60, DRR, and C50 from single-channel recordings without reference signals.]
+                </p>
+            </div>
+            <div class="space-y-4">
+                <h3 class="text-xs font-bold uppercase tracking-widest text-blue-500">Deployment</h3>
+                <p class="leading-relaxed text-sm text-slate-400">
+                    Built on a Serverless Event-Driven Architecture.
+                    <ul class="list-disc list-inside mt-2 space-y-1 text-slate-500">
+                        <li>AWS Lambda (Compute)</li>
+                        <li>ONNX Runtime (Inference)</li>
+                        <li>S3 & CloudFront (Delivery)</li>
+                        <li>D3.js (Visualization)</li>
+                    </ul>
+                </p>
+            </div>
+        </div>
+
+        <!-- Methodology -->
+        <div class="bg-slate-900/50 p-8 rounded-2xl border border-slate-800 space-y-4">
+            <h3 class="text-xs font-bold uppercase tracking-widest text-purple-500">Methodology</h3>
+            <p class="leading-relaxed text-sm text-slate-400">
+                [PLACEHOLDER: Explain sliding window approach. How model estimates parameters and confidence intervals (quantiles) for each frequency band.]
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <footer class="text-center pt-12 border-t border-slate-900">
+            <p class="text-[10px] uppercase tracking-widest text-slate-600">
+                Research by Philipp • Deployment by David
+            </p>
+        </footer>
+    </div>
+    </section>
+
+    <script>
+        const micBtn = document.getElementById('mic-btn');
+        const fileInput = document.getElementById('file-input');
+        const statusText = document.getElementById('status-text');
+        const jsonResult = document.getElementById('json-result');
+        const resultArea = document.getElementById('result-area');
+
+        let mediaRecorder;
+        let audioChunks = [];
+
+        let currentTimelineData = null; //store timeline data outside of upload(blob) function
+
+        // --- MICROPHONE LOGIC ---
+        micBtn.onclick = async () => {
+            if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                    mediaRecorder.onstop = () => upload(new Blob(audioChunks, { type: 'audio/wav' }));
+                    mediaRecorder.start();
+                    micBtn.classList.add('recording-glow', 'border-red-500');
+                    statusText.innerText = "Recording...";
+                } catch (err) { alert("Mic access denied."); }
+            } else {
+                mediaRecorder.stop();
+                micBtn.classList.remove('recording-glow', 'border-red-500');
+                statusText.innerText = "Processing...";
+            }
+        };
+
+        // --- FILE UPLOAD LOGIC ---
+        fileInput.onchange = (e) => {
+            if (e.target.files.length > 0) {
+                statusText.innerText = "Processing...";
+                document.getElementById('spinner').classList.remove('hidden');
+                upload(e.target.files[0]);
+            }
+        };
+        
+        // DATA VIZ
+        function drawChart(timeline) {
+            const container = document.getElementById('chart-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            const seriesData = [];
+            const paramCount = 7;
+
+            for (let p = 0; p < paramCount; p++) {
+                const paramsAndIntervals = timeline.map(d => ({
+                    time: d.timestamp_step,
+                    // BAPEs array has 21 items
+                    // param 0 uses indices 0,1,2 – param 1 uses 3,4,5 – …
+                    low:  d.BAPEs[p * 3], // Lower bound of confidence interval for paramter p
+                    val:  d.BAPEs[p * 3 + 1], // Actual estimate of parameter p
+                    high: d.BAPEs[p * 3 + 2] // Upper bound of confidence interval for parameter p
+                }));
+                // add to seriesData
+                seriesData.push({ id: p, values: paramsAndIntervals }); // Note: I renamed 'paramsAndIntervals' to 'values' for consistency
+            }
+
+            // Calculate global Min/Max across all series
+            const allValues = seriesData.flatMap(s => s.values); // Flatten all 7 series into one big list
+                        
+            // use D3 color palette and use ordinal scale to map param IDs to colors
+            const colorScale = d3.scaleOrdinal(d3.schemeTableau10)
+                .domain([0, 1, 2, 3, 4, 5, 6])
+
+            // 2. Clear previous chart and create svg container
+            d3.select("#chart-container").selectAll("*").remove();
+
+            const svg = d3.select("#chart-container")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+            // 3. Define Scales (Scales translate data values, the INPUT DOMAIN, to screen values, the OUTPUT RANGE)
+
+            // x-axis:time
+            const xScale = d3.scaleLinear()
+                .domain([0, d3.max(allValues, d => d.time)]) // INPUT from 0 max value from d.time
+                .range([50, width - 20]); // OUTPUT starting at 50px and ending 20px before max width
+
+            // y-axis: estimate
+            const yScale = d3.scaleLinear()
+                .domain([
+                    d3.min(allValues, d => d.low) * 0.9, // INPUT MIN is lowest lower bound value (d.low); scale by 0.9 to add space beneath
+                    d3.max(allValues, d => d.high) * 1.1 // INPUT MX is highest upper bound value (d.high); scale by 1.1 to add space above
+                ])
+                .range([height - 30, 20]); // OUTPUT starting at (max height - 30px), ending at 20px height
+            
+            // define an area chart with .low and .high, and a line chart with the actual .val
+            
+            // create area generator
+            const areaGenerator = d3.area()
+            .x(d => xScale(d.time)) //get x-value from time step
+            .y0(d => yScale(d.low)) //get lower bound confidence
+            .y1(d => yScale(d.high)) //get upper bound confidence
+            //optional line-smoothing
+            .curve(d3.curveMonotoneX); 
+
+            //   create line generator
+            const lineGenerator = d3.line()
+            .x(d => xScale(d.time)) // take timestampe_step values and scale to x-axis
+            .y(d => yScale(d.val)) // take BAPEs value at index[1]
+            //optional line-smoothing
+            .curve(d3.curveMonotoneX);
+
+
+            // Layer the visualization
+
+            // We visualize each param and its confidence intervall in a group
+            
+            // 1. create groups
+            const groups = svg.selectAll(".parameter-group")
+                .data(seriesData)
+                .enter()
+                .append("g")
+                .attr("class", d => `parameter-group param-${d.id}`) // class to toggle 
+
+            // 2. append area graph to each group
+            groups.append("path")
+                .attr("class", "confidence-area")
+                .attr("d", d => areaGenerator(d.values)) // generator sources values.low and .high to generate area
+                .attr("fill", d => colorScale(d.id))
+                .attr("opacity", 0.1);
+
+            // 3. append line graph to each group
+            groups.append("path")
+                .attr("class", "estimate-line")
+                .attr("d", d => lineGenerator(d.values)) // generator sources values.low and .high to generate area
+                .attr("stroke", d => colorScale(d.id))
+                .attr("stroke-width", 2)
+                .attr("fill", "none");
+                
+
+            // append grid/axes (background)
+            // x-axis at bottom
+            svg.append("g")
+                .attr("transform", `translate(0, ${height - 30})`) // place at bottom
+                .call(d3.axisBottom(xScale)) // Constructs a new bottom-oriented axis generator for the given scale, with empty tick arguments, a tick size of 6 and padding of 3
+            
+            // y-axis to the left
+            svg.append("g")
+                .attr("transform", `translate(50 ,0)`) // move right to keep margin
+                .call(d3.axisLeft(yScale)) // Constructs a new bottom-oriented axis generator for the given scale, with empty tick arguments, a tick size of 6 and padding of 3
+
+            // data visualisation
+
+            // 1. Define the dictionary
+            const bandLabels = [
+                { freq: "125 Hz", desc: "Bass/Low-end" },
+                { freq: "250 Hz", desc: "Lower-mid" },
+                { freq: "500 Hz", desc: "Mids" },
+                { freq: "1 kHz",  desc: "Reference Band" },
+                { freq: "2 kHz",  desc: "Upper-mids" },
+                { freq: "4 kHz",  desc: "Presence/Highs" },
+                { freq: "8 kHz",  desc: "Brilliance" }
+            ];
+
+            // 2. Loop through the data series
+            seriesData.forEach(s => {
+                // A. Create the main Button Container
+                const btn = document.createElement("button");
+                btn.className = "flex items-center space-x-3 text-xs p-2 rounded hover:bg-white/5 w-full text-left transition-all border border-transparent hover:border-slate-700 group";
+    
+                // B. Create the Color Dot
+                const dot = document.createElement("div");
+                dot.className = "w-3 h-3 rounded-full flex-shrink-0 shadow-lg shadow-black/50";
+                dot.style.backgroundColor = colorScale(s.id);
+                
+                // C. Create a Wrapper DIV for the text (Flex Column)
+                const textCol = document.createElement("div");
+                textCol.className = "flex flex-col";
+
+                // D. Create the Frequency Span (Bold)
+                const freqLabel = document.createElement("span");
+                freqLabel.className = "font-bold text-slate-200 group-hover:text-white";
+                // --- PARSING HAPPENS HERE ---
+                freqLabel.innerText = bandLabels[s.id].freq; 
+
+                // E. Create the Description Span (Small/Gray)
+                const ctxLabel = document.createElement("span");
+                ctxLabel.className = "text-[10px] text-slate-500 uppercase tracking-wider group-hover:text-slate-400";
+                // --- PARSING HAPPENS HERE ---
+                ctxLabel.innerText = bandLabels[s.id].desc;
+
+                // F. Attach text spans to the Wrapper Div
+                textCol.appendChild(freqLabel);
+                textCol.appendChild(ctxLabel);
+    
+                // G. Add Toggle Functionality
+                btn.onclick = () => {
+                    const group = d3.select(`.param-${s.id}`);
+                    const currentOpacity = group.style("opacity");
+                    
+                    // Toggle visibility (Fade in/out)
+                    group.transition().duration(200).style("opacity", currentOpacity == 1 ? 0 : 1);
+                    
+                    // Visual feedback on the button itself
+                    btn.classList.toggle("opacity-40");
+                    btn.classList.toggle("grayscale");
+                }
+
+                // H. Final Assembly: Attach Dot and TextWrapper to Button
+                btn.appendChild(dot);
+                btn.appendChild(textCol);
+
+                // I. Mount to the Page
+                document.getElementById("chart-legend").append(btn);
+            });
+        };
+
+        // --- MAIN LOGIC ---
+        async function upload(blob) {
+            const formData = new FormData();
+
+            // LOGIC: Check if it's a file with a name, otherwise default to 'mic_recording'
+            let filename = 'mic_recording.wav'; 
+            if (blob.name) {
+                filename = blob.name;
+            }
+            // append with file name
+            formData.append('audio_file', blob, filename);
+
+            // Simulating a progress timer if it's a cold start
+            let progressSeconds = 0;
+            const progressInterval = setInterval(() => {
+                progressSeconds++;
+                if (progressSeconds === 10) statusText.innerText = "Cold Start…";
+                if (progressSeconds === 15) statusText.innerText = "Booting system...";
+                if (progressSeconds === 20) statusText.innerText = "Processing...";
+                }, 1000);
+
+            try {
+                const response = await fetch('https://7ng4jbdvj2cd4s7ewneapjwaai0hyilw.lambda-url.eu-central-1.on.aws/acou-vec/generate', { method: 'POST', body: formData });
+                
+                debugger;
+
+                const data = await response.json();
+
+                // store data outside of function to make it available for window resize, but also for drawChart
+                currentTimelineData = data.timeline_of_results;
+
+                const presigned_urls = data.preprocessed_inputs;
+
+                // 1. Set the Audio Player source
+                if (presigned_urls.wav_url) {
+                    document.getElementById('audio-player').src=presigned_urls.wav_url;
+                }
+                // 2. Set the Spectrogram Image source
+                if (presigned_urls.png_url) {
+                    document.getElementById('spectrogram-display').src=presigned_urls.png_url;
+                }
+                
+                // Clear the timer once the real data arrives
+                clearInterval(progressInterval);
+                document.getElementById('spinner').classList.add('hidden');
+
+                resultArea.classList.remove('hidden');
+                drawChart(currentTimelineData);
+                jsonResult.textContent = JSON.stringify(data, null, 2);
+                statusText.innerText = "Analysis Complete";
+            } catch (err) {
+                statusText.innerText = "Failed";
+                console.error(err);
+            }
+        }
+
+        // re-render D3 graphs on window resize
+
+        let resizeTimer;
+
+        window.addEventListener("resize", () => {
+            // 1. Clear any timer
+            clearTimeout(resizeTimer);
+            // 2. Set a new timer to run 200ms AFTER the last resize event
+            resizeTimer = setTimeout(() => {
+                if (currentTimelineData) {
+                    // Recalculate dimensions and redraw
+                    drawChart(currentTimelineData);
+                }
+            }, 200);
+        });
+    </script>
+</body>
+</html>
