@@ -213,6 +213,10 @@ sketch out [vpc.tf](../terraform/vpc.tf)
   - (task role) for our Code (Boto3, S3, Cloudwatch…)
 
 
+================================================================
+---------------------INFERENCE DEBUGGING------------------------
+see [../phase-4-servereless_deployment/docs/inference_debugging](Inference Debugging Notes / artifacts on branch `debug/`)
+================================================================
 
 ```mermaid
 flowchart LR

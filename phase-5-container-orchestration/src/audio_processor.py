@@ -2,16 +2,15 @@ import os
 import uuid
 import subprocess
 import logging
+import io
+import pathlib
 
 import numpy as np
-
 import matplotlib
 # explicitly set the Anti-Grain Geometry backend which is designed for headless servers
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-
 import librosa
-import io
 import torch
 from torch import Tensor
 from librosa.feature import melspectrogram
@@ -219,7 +218,8 @@ def preprocess_audio(audio_bytes: bytes): #in phase 3 this was a path but after 
         
         # render entire spectrogran in matplotlib as png / in bytes 
         full_spectrogram_2d=melspec_preprocessor(audio_array)
-        spectrogram_png=generate_spectrogram_image(full_spectrogram_2d)
+        full_spectrogram_2d_std=(full_spectrogram_2d - np.mean(full_spectrogram_2d)) / (np.std(full_spectrogram_2d + 1e-8))
+        spectrogram_png=generate_spectrogram_image(full_spectrogram_2d_std)
         print("Full spectrogram rendered in matplotlib as png.")
 
         # create list of spectrograms
