@@ -1,0 +1,15 @@
+_target_: src.data.datamodule.DataModule
+
+train_url: data/dataset_speech_ctr/train-{0000..0010}.tar
+valid_url: data/dataset_speech_ctr/valid-{0000..0001}.tar
+test_url: data/dataset_speech_ctr/test-{0000..0001}.tar
+
+data_tuple: [
+  "signal.pyd",
+  "label.pyd",
+  "norm.pyd",
+  "snr.pyd",
+]
+
+batch_size: 1
+num_workers: 0
