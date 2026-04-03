@@ -69,7 +69,7 @@ def normalize_with_ffmpeg(audio_bytes: bytes, target_sr: int = 16000) -> np.ndar
         return audio_array, clean_wav
 
     except subprocess.CalledProcessError as e:
-        # Capture FFmpeg stderr (Standard Error) for debugging
+        # Capture FFmpeg stderr (Standar Error) for debugging
         logging.error(f"FFmpeg failed: {e.stderr.decode()}")
         raise RuntimeError(f"Could not process audio file: {e.stderr.decode()}")
         
@@ -208,45 +208,36 @@ def preprocess_audio(audio_bytes: bytes): #in phase 3 this was a path but after 
     """Preprocesses audio and returns normalized wav, spectrogram as array and png."""
 
     try:
-        #normalize and generate wav
+        #normalize audio
         audio_array, clean_wav = normalize_with_ffmpeg(audio_bytes, target_sr=16000)
         
         input_duration = len(audio_array)/16000
 
-        # slice input
-        slices, timestamps = slice_audio_to_chunks(audio_array)
-        
-        # render entire spectrogran in matplotlib as png / in bytes 
-        full_spectrogram_2d=melspec_preprocessor(audio_array)
-        full_spectrogram_2d_std=(full_spectrogram_2d - np.mean(full_spectrogram_2d)) / (np.std(full_spectrogram_2d + 1e-8))
-        spectrogram_png=generate_spectrogram_image(full_spectrogram_2d_std)
-        print("Full spectrogram rendered in matplotlib as png.")
+        #generate one full spectrogram
+        raw_spectrogram = melspec_preprocessor(audio_array)
 
-        # create list of spectrograms
-        list_of_spectrograms=[]
-        # as slices is a list, loop through each slice
-        for slice in slices:
-            # create spectrogram for THIS slice using height of `n_mels`(16) and width of `trunc`(2000) --> shape: (16, 2000)
-            spectrogram_2d = melspec_preprocessor(slice)
-            # append spectrogram to list of spoectrograms
-            list_of_spectrograms.append(spectrogram_2d)
+        # standardize raw spectrogram
+        mean = raw_spectrogram.mean()
+        std = raw_spectrogram.std()
+
+        standardized_spectrogram = mean / (std + 1e-8)
+
+        # gnerate PNG from standarized spectrogram
+        std_spectrogram_png = generate_spectrogram_image(standardized_spectrogram.numpy())
         
-        # list of spectrograms is a list and has `len()` but not `.shape`
-        # the contained spectrograms are arrays and have a shape of (16,2000)
-        #using `np.stack` on `list_of_spectrograms` takes all arrays from the list and stacks them into a batch array with the shape of (N,16,2000), whereas N is the number of spectrograms in 'list_of_spectrograms
-        batched_spectrograms_3d = np.stack(list_of_spectrograms, axis=0)
-        print(f"Shape of spectogram_3d after shape preprocessing step 2: {batched_spectrograms_3d.shape}. Expected shape: (N,16,2000). N = Batch Size, Height = 16, Width = 2000")
-        
-        # Add fourth dimension for channels at position 1; shape -> (N, 1, 16, 2000) (batch size, channels, height, width)
-        batched_spectrograms_4d = np.expand_dims(batched_spectrograms_3d, axis=1)
-        print(f"Shape of spectogram_4d after shape preprocessing step 3: {batched_spectrograms_4d.shape}")
-        
+        # ---TBD: slicing loging incomplete!!---
+        final_spectrogram = standardized_spectrogram[:, :2000]
+
+        # expand spctrogram tensor from 2D to 4D
+
+        batched_spectrograms_4d = final_spectrogram.unsqueeze(0).unsqueeze(0)
+
         # Return 
         # - final tensor (batched_spectrograms_4d)
         # - normalized wav (clean_wav)
         # - spectrogram for entire input (spectrogram_png)
         # - timestamps in seconds (timestamps) – necessary for correct visualization
-        return batched_spectrograms_4d, clean_wav, spectrogram_png, timestamps, input_duration
+        return batched_spectrograms_4d, clean_wav, spectrogram_png, [0.0], input_duration
     
     except Exception as e:
         logging.error(f"Spectrogram generation failed: {e}")

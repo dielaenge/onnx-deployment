@@ -144,3 +144,37 @@ The comparison shows the model was not trained on raw Decibels but on Standardiz
     - Vendorring
       - Pros: stability, project is "self-contained." The Docker build doesn't need to reach out to BAPE GitHub. 
       - Cons: manually copy files in case of BAPE updates
+
+### Implementng bug fix to phase 5
+
+- commit all debug/inference-sandbox file edits
+- copy fixed `bape_v2_standardized.onnx` and `bape_v2_standardized.onnx.data` to phase 5 folder
+- copy `param_estimator-onnx_exporter.py` to phase 5 folder
+
+- update phase 5 folder structure to
+```
+  root/
+  - app/
+    - audio_utils.py (was audio_processor.py)
+    - inference_engine.py (was model_processor.py)
+    - main.py
+    - __init__.py
+  - models/
+    - `bape_v2_standardized.onnx`
+    - `bape_v2_standardized.onnx.data`
+  - scripts/
+    - param_estimator-onnx_exporter.py
+  - terraform/
+    -  (…).tf
+  - Dockerfile
+  - requirements.in
+  - requirements.txt
+```
+
+- from `pathlib import Path` for `main.py`
+ - implement path logic, to identify
+   - base directory
+   - model path
+
+- add __init__.py to enable app logic in uvicorn command:
+`python -m uvicorn app.main:app --reload`

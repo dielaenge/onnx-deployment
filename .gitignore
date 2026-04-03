@@ -5,7 +5,10 @@ venv_py313
 env/
 ENV/
 venv.nosync/
+.venv.nosync/
 **/venv.nosync/
+.direnv/
+venv_laptop/
 
 # --- AWS and Local Config ---
 .envrc
@@ -24,6 +27,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.py[cod]
 
 # --- Dependency & Build Artifacts ---
 *.egg-info/

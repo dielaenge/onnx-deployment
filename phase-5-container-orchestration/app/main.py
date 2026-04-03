@@ -11,9 +11,13 @@ import time
 import json
 import logging
 import uuid
+from pathlib import Path
 
-from src.model_processor import AcousticModelProcessor
-from src.audio_processor import preprocess_audio
+from .inference_engine import AcousticModelProcessor
+from .audio_utils import preprocess_audio
+
+# Identify Base Directory
+BASE_DIR = Path(__file__).resolve().parent
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -59,8 +63,9 @@ def upload_artifact_and_get_presigned_url(file_bytes: bytes, object_key: str, co
     
 
 # --- Model init (happens once at server startup) ---
-# choose export version of model.pth
-MODEL_PATH = "onnx/super_param_estimator_opset18_2025-11-18_17-40-57.onnx"
+MODEL_PATH = BASE_DIR.parent / "models" / "bape_v2_standardized.onnx"
+print(f"DEBUG: Loading model from {MODEL_PATH}")
+
 processor = None
 try:
     processor = AcousticModelProcessor(MODEL_PATH)
