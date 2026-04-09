@@ -1,4 +1,6 @@
+import sys
 import os
+
 import uuid
 import subprocess
 import logging
@@ -118,7 +120,6 @@ def slice_audio_to_chunks(audio_array: np.ndarray, sr=16000):
     return slices, timestamps
 
 # generating the spectrogram image 
-
 def generate_spectrogram_image(spectrogram_2d: np.ndarray) -> str:
     """
     Converts the 2D Spectrogram (a numpy array) into a PNG in bytes.
@@ -163,10 +164,7 @@ class MelSpectrogram:
         # self.freqs = mel_frequencies(n_mels=n_mels, fmin=fmin, fmax=fmax) #not used in the __call__ function
     
     def __call__(self, input_signal: np.ndarray) -> np.ndarray:
-        
-        # the following check is redundant as the transform_audio_to_spectogram function we define further down always passes NumPy arrays from librosa.load()
-        #if isinstance(input_signal, Tensor):
-        #    input_signal = input_signal.numpy()
+        """Takes 1D audio signal as input and returns the melspectrogram as a 2D numpy array."""
 
         # From here until `return` statement code is copied from BAPE repo
         spec = melspectrogram(
@@ -187,8 +185,7 @@ class MelSpectrogram:
             else:
                 spec = spec[:, : self.trunc]
 
-        # Edited to be returned as a NumPy array for ONNX Runtime
-        return spec.numpy()
+        return spec
     
 # --- Create an instance of the MelSpectogram class ---
     
@@ -220,28 +217,25 @@ def preprocess_audio(audio_bytes: bytes): #in phase 3 this was a path but after 
         mean = raw_spectrogram.mean()
         std = raw_spectrogram.std()
 
-        standardized_spectrogram = mean / (std + 1e-8)
+        standardized_spectrogram = (raw_spectrogram - mean) / (std + 1e-8)
 
         # gnerate PNG from standarized spectrogram
-        std_spectrogram_png = generate_spectrogram_image(standardized_spectrogram.numpy())
+        std_spectrogram_png = generate_spectrogram_image(standardized_spectrogram)
         
         # ---TBD: slicing loging incomplete!!---
         final_spectrogram = standardized_spectrogram[:, :2000]
 
         # expand spctrogram tensor from 2D to 4D
-
         batched_spectrograms_4d = final_spectrogram.unsqueeze(0).unsqueeze(0)
+        batched_spectrograms_4d = batched_spectrograms_4d.numpy() # convert to numpy array for ONNX runtime
 
         # Return 
-        # - final tensor (batched_spectrograms_4d)
+        # - final numpy array (batched_spectrograms_4d)
         # - normalized wav (clean_wav)
         # - spectrogram for entire input (spectrogram_png)
         # - timestamps in seconds (timestamps) – necessary for correct visualization
-        return batched_spectrograms_4d, clean_wav, spectrogram_png, [0.0], input_duration
+        return batched_spectrograms_4d, clean_wav, std_spectrogram_png, [0.0], input_duration
     
     except Exception as e:
         logging.error(f"Spectrogram generation failed: {e}")
         raise e
-    
-
-

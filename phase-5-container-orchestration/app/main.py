@@ -1,9 +1,6 @@
 import os
 import boto3
 from botocore.exceptions import ClientError
-# Check environment variables of Lambda function
-#print(f"Debug: NUMBA_CACHE_DIR is {os.environ.get('NUMBA_CACHE_DIR')}")
-#print(f"Debug: JOBLIB_TEMP_FOLDER is {os.environ.get('JOBLIB_TEMP_FOLDER')}")
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 import uvicorn
@@ -13,11 +10,13 @@ import logging
 import uuid
 from pathlib import Path
 
+# Identify Base Directory
+BASE_DIR = Path(__file__).resolve().parent
+
 from .inference_engine import AcousticModelProcessor
 from .audio_utils import preprocess_audio
 
-# Identify Base Directory
-BASE_DIR = Path(__file__).resolve().parent
+
 
 # --- Logging Setup ---
 logging.basicConfig(
