@@ -171,10 +171,156 @@ The comparison shows the model was not trained on raw Decibels but on Standardiz
   - requirements.txt
 ```
 
+===============================
+--- Switch to Intel MacBook ---
+===============================
+
 - from `pathlib import Path` for `main.py`
- - implement path logic, to identify
-   - base directory
-   - model path
+  - implement path logic, to identify
+    - base directory
+    - model path
+  - clear `sys.path` workarounds
 
 - add __init__.py to enable app logic in uvicorn command:
 `python -m uvicorn app.main:app --reload`
+
+- new structure (app/, scripts/, models/) separates tools (exporter) from engine/API
+
+```
+phase-5-container-orchestration/
+├── app/                  # Logic needed for the container
+│   ├── main.py           # (Your API code)
+│   ├── audio_utils.py    # (Your MelSpectrogram & Preprocessing classes)
+│   └── models/           # Your standardized .onnx file
+├── scripts/              # "Lab tools" not needed in production
+│   └── exporter.py       # The script that creates the ONNX
+├── terraform/            # Your IaC
+└── docs/                 # Your decision logs
+```
+
+- fixing venv issues
+  - killing old venvs
+  - keep new venvs out of sync (icloud & github)
+  - create new venv on Intel MB
+  - configure `direnv`
+    - add `layout python python3.11` to `.envrc` to automatically load `python3.11` virtual env
+  - install requirements
+
+- bug fixing
+  - updated onnx model export (`dynamo=True`) is based on newest [IR version](https://www.google.com/url?sa=E&q=https%3A%2F%2Fonnx.ai%2Fonnx%2Fintro%2Fconcepts.html%23ir-versions) and requires a onnxruntime version >1.17.0, which was fixed in the requirements.in at 1.16.3 because of old export configs
+  - standardization syntax error in `audio_utils.py`: did not subtract mean from `full_spectrogram_2d` before division
+  - first test run failed to resolve "dot" notation for import (`from .audio_utils import …`)
+    - created empty `__init__.py` to recognize `models/` folder as package
+    - as main.py now uses relative imports it must be launched as a module
+    (`python -m uvicorn …`)
+
+  - shape error: onnx runtime expects numpy array while `preprocess_audio` was returning `batched_spectrograms_4d` as a tensor
+    - used Debugger to follow shape at breakpoints and modify to fix
+
+
+=====================================
+--- Switch back to Apple Silicone ---
+
+Snapshots to summarize:
+
+*Overall:*
+I took some time to retrace what I did during my visit as I was pretty distracted during that time.
+Maybe you can help – in that regard, you must consider that you provided straight forward guidance and I was trying to follow though I would actually like to become more knowledgeable and in command, don't paint it as if I was understanding and memorizing everything entirely and perfectly, rather assume I kept the basics at best, also take into consideration, what information I gave you and questions I asked and defer an objective grade of what I actually did and learned.
+
+> Here is your objective grade:
+> - What you actually learned/own: You understand why we are doing this. You grasped the concept of the sliding window, you correctly identified that the reference input needed to be verified, you understood that "shapes" and "types" have to align between PyTorch and ONNX, and you understand the necessity of having "clean" paths.
+> - What you do NOT own yet: The exact syntax muscle memory, the advanced Git recovery maneuvers, and the deep mechanics of how Python resolves its environment behind the scenes.
+> - The Verdict: This is exactly where a Junior/Mid Cloud Engineer should be. You have the architectural vision, but the syntax still feels like a foreign language. That is normal.
+
+
+*direnv:*
+I think I'm starting to make sense of the direnv install. If it's installed it does something with ~/.zshrc (which I currently can't access from my M4 terminal !?) and then checks for an .envrc file in every folder that is opened in order to then invoke environment variables and virtual environment configs which are then written to a .direnv folder.
+
+> You said: It does something with ~/.zshrc (which I can't access).
+> - Clarification: You can access it! ~ just means your home folder (/Users/davidgoossens). The . means it's hidden. If you type cat ~/.zshrc in your terminal, you will see the eval "$(direnv hook zsh)" line. This line simply tells your terminal: "Every time David changes directories, run direnv."
+>You said: It checks for an .envrc file in every folder... invokes environment variables and venv configs...
+> - Correct.
+>You said: ...which are then written to a .direnv folder.
+> - Essential Correction: It doesn't write configs to .direnv. When you put layout python python3.11 in your .envrc, direnv literally runs python3.11 -m venv .direnv/python-3.11. That folder IS your virtual environment. It's just a standard venv that direnv manages automatically so you don't have to type source activate.
+> You observed: Separation of separate direnvs for phase 4 and phase 5.
+> - Correct & Essential: Because you have an .envrc in Phase 4 and a different one in Phase 5, direnv creates two entirely separate Python universes. Phase 4 cannot accidentally use a library installed in Phase 5. This is the definition of "Environment Parity."
+
+*Syncing*
+Using iCloud and git/GitHub across two different CPU architectures (Apple Silicone M4 / Intel ARM64) became weird and needed clarification.
+
+> ### Rule 1: Git is for Code. iCloud is for Artifacts.
+> Git is the Source of Truth. If the MacBook dies, whatever is on github.com is what survives. However, Git hates large binary files (like the 15MB .onnx models). Use iCloud to automatically sync larger files between Macs.
+
+> ### Rule 2: Environments (`.direnv`, `venv`) MUST NEVER SYNC.
+> Python environments contain binary files compiled specifically for the CPU that built them.
+>> The Practical Step: Ensure `.direnv/` and `venv/` are in your `.gitignore`. Also, if possible, you don't want iCloud syncing them because it wastes bandwidth. (This is why we used `.nosync` earlier, but since we are using `direnv` now, we just have to accept iCloud might sync .direnv. 
+>> WHEN SWITICHING MACS:
+>>```
+>>rm -rf .direnv && direnv allow
+>>```
+>>  to rebuild locally
+
+### Rule 3: The "Lid Open / Lid Close" Protocol.
+> Closing the laptop: 
+> ```
+> git add .
+> git commit -m "wip"
+> git push
+> ```
+> Opening the Mac Mini: 
+> ```
+> git fetch
+> git status
+> git pull
+>```
+
+=====================================
+
+- git stashing changes made on M4 before pushing on IntelMB
+- on IntelMB: `git push origin feat/container-orchestration` to push changes
+  - among others: .numpy() on final 4D batched spectrogram enabled switch from PyTorch tensor math to ONNX's C++ runtime (array-based)
+- on M4: `git pop` to add stashed changes
+
+- removed .direnv and allowed direnv
+- install torch, torchaudio, pip-tools
+- compile requirements.in
+- install requirements
+
+- run updated `main.py` locally and test with reference file wet_speech.wav
+  - result parity with reference results
+
+## Building back the frontend
+
+- at the start of debugging, I reverted to the last *one-shot* version, meaning the app produces one estimation result regardless of the input löength, instead of slicing it to overlapping 4 second chunks and producing an estimation result for each chunk
+
+- I want to build back to the full system before picking up where I left off for debugging
+
+- add slicing logic to audio_utils.py, which currently produces one set of estimates for inputs of any length
+  rubber duck version:
+  - define a size for slices (window)
+  - define overlap / stride (having overlap allows denser, smoother results)
+  - define empty list for slices
+  - define empty list for timestamps
+
+  - loop through full input tensor, 
+    - slicing it to defined size with defined step size
+    - when the last slice is smaller than the defined size
+      - make it a numpy array and pad it to the right, with whats missing
+    
+    - in each step, calculate timestamp_sec by dividing current first frame number of slice by 500, as 500 frames are 1 second
+    - append timestamp_sec to the timestamps_sec list
+
+  - before, the one-shot spectrogram came out as a pytorch tensor and I used unsqueeze() to add required dimensions
+  - now, the slices added to the list are numpy arrays already, so I use np.expand_dims() to augment it to it's final preprocessed batched_spectrograms_4d shape
+
+- after implementing the changes, a first local test resulted in 
+
+```zsh
+onnxruntime.capi.onnxruntime_pybind11_state.RuntimeException: [ONNXRuntimeError] : 6 : RUNTIME_EXCEPTION : Non-zero status code returned while running Reshape node. Name:'node_view_1' Status Message: /Users/cloudtest/vss/_work/1/s/onnxruntime/core/providers/cpu/tensor/reshape_helper.h:47 onnxruntime::ReshapeHelper::ReshapeHelper(const TensorShape &, TensorShapeVector &, bool) input_shape_size == size was false. The input tensor cannot be reshaped to the requested shape. Input shape:{125,2,768}, requested shape:{125,1,3,256}
+```
+
+- when I exported the current onnx model, the export was successful but I also received `UserWarning: 'dynamic_axes' is not recommended when dynamo=True...`.
+
+- In my exporter script this is still the case and as it is till broken for phase 5 because of missing pathlib logic, we need to fix this next
+
+
