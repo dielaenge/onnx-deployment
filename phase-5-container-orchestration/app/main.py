@@ -62,7 +62,7 @@ def upload_artifact_and_get_presigned_url(file_bytes: bytes, object_key: str, co
     
 
 # --- Model init (happens once at server startup) ---
-MODEL_PATH = BASE_DIR.parent / "models" / "bape_v2_standardized.onnx"
+MODEL_PATH = BASE_DIR / "models" / "bape_v2_standardized.onnx"
 print(f"DEBUG: Loading model from {MODEL_PATH}")
 
 processor = None
@@ -165,7 +165,7 @@ async def call_bape_api(audio_file: UploadFile = File(...)):
     return {
         "request_metadata": {        
             "filename": audio_file.filename,
-            "input_duration": input_duration,
+            "input_duration": f"{round(input_duration,2)} seconds",
             "processing_time_ms": round(processing_time_ms, 3)
         },
 
