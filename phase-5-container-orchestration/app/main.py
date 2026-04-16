@@ -28,7 +28,7 @@ app = FastAPI(title="BAPE API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # should be restricted to CloudFront URL
+    allow_origins=["http://localhost:3000"], # should be restricted to CloudFront URL
     allow_credentials=True,
     allow_methods=["*"], # Allows POST, GET, OPTIONS, etc.
     allow_headers=["*"], # Allows Content-Type, Authorization, etc.
