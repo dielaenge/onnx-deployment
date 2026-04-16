@@ -55,43 +55,41 @@
             <!-- Result Area -->
             <div id="result-area" class="hidden space-y-6 pt-4 border-t border-slate-800 text-left w-full">
                 
-                <!-- NEW GRID WRAPPER: 1 col on mobile, 3 cols on desktop -->
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    
-                    <!-- LEFT COLUMN: The Inputs (Takes 1/3 of space) -->
-                    <div id="visual-verification" class="space-y-4 lg:col-span-1">
-                        <div class="space-y-2">
-                            <h3 class="text-xs font-bold uppercase text-slate-500">Input Audio</h3>
-                            <audio id="audio-player" controls class="w-full h-8 opacity-80 hover:opacity-100 transition-opacity"></audio>
-                        </div>
-                        <div class="space-y-2">
-                            <h3 class="text-xs font-bold uppercase text-slate-500">Spectrogram</h3>
-                            <img id="spectrogram-display" class="rounded-lg border border-slate-700 w-full" />
-                        </div>
-                    </div>
-    
-                    <!-- RIGHT COLUMN: The Outputs (Takes 2/3 of space) -->
-                    <div class="space-y-2 lg:col-span-2">
-                        <h3 class="text-emerald-500 uppercase text-[10px] font-black tracking-widest">Acoustic Parameter Timeline</h3>
-                        <div class="flex flex-col md:flex-row gap-4">
-                        <!-- D3 Chart & Tooltip Wrapper -->
-                        <div class="w-full md:w-3/4 h-80 relative bg-black/40 rounded-xl border border-emerald-500/10">
-                            
-                            <!-- D3 SVG injected here (This gets wiped by D3 safely) -->
+                <!-- TOP: The Outputs (Chart + Legend) -->
+                <div class="space-y-2 w-full">
+                    <h3 class="text-emerald-500 uppercase text-[10px] font-black tracking-widest">Acoustic Parameter Timeline</h3>
+                    <div class="flex flex-col md:flex-row gap-4">
+                        <!-- D3 Chart -->
+                        <div class="w-full md:w-3/4 lg:w-4/5 h-[400px] lg:h-[600px] relative bg-black/40 rounded-xl border border-emerald-500/10 flex-shrink-0">
                             <div id="chart-container" class="w-full h-full"></div>
-
-                            <!-- Tooltip (Safe from the wipe, but shares the exact same coordinate box!) -->
+                            <!-- Tooltip -->
                             <div id="tooltip" class="absolute opacity-0 bg-slate-900/90 border border-slate-700 text-slate-200 p-3 rounded-lg shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-full text-xs z-[100] backdrop-blur-sm transition-opacity duration-200">
                                 <div id="tt-header" class="font-bold text-white mb-1"></div>
                                 <div id="tt-value" class="font-mono text-emerald-400"></div>
                             </div>
                         </div>
-        
-                            <!-- chart legend -->
-                            <div id="chart-legend" class="w-full md:w-1/4 grid grid-cols-2 md:grid-cols-1 gap-2 bg-slate-900/50 p-4 rounded-xl max-h-80 overflow-y-auto">
-                            </div>
+
+                        <!-- Legend -->
+                        <div id="chart-legend" class="w-full md:w-1/4 lg:w-1/5 grid grid-cols-2 md:grid-cols-1 gap-2 bg-slate-900/50 p-4 rounded-xl max-h-[400px] lg:max-h-[600px] overflow-y-auto content-start">
                         </div>
                     </div>
+                </div>
+
+                <!-- BOTTOM: The Inputs (Audio + Spectrogram) -->
+                <div id="visual-verification" class="grid grid-cols-1 md:grid-cols-4 gap-6 bg-slate-900/30 p-6 rounded-xl border border-slate-800 items-center">
+                    
+                    <!-- Audio Player (Left, 1 column) -->
+                    <div class="space-y-2 md:col-span-1">
+                        <h3 class="text-xs font-bold uppercase text-slate-500">Input Audio</h3>
+                        <audio id="audio-player" controls class="w-full h-10 opacity-80 hover:opacity-100 transition-opacity"></audio>
+                    </div>
+
+                    <!-- Spectrogram (Right, 3 columns) -->
+                    <div class="space-y-2 md:col-span-3">
+                        <h3 class="text-xs font-bold uppercase text-slate-500">Spectrogram</h3>
+                        <img id="spectrogram-display" class="rounded-lg border border-slate-700 w-full max-h-32 object-cover opacity-80" />
+                    </div>
+                    
                 </div>
               
                 
@@ -275,7 +273,7 @@
       
         let currentTimelineData = null; //store timeline data outside of upload(blob) function
 
-        let isolatedParamId = null; //isolated param_id to trigger 
+        let lockedParamId = null; //isolated param_id to trigger 
 
         // --- MICROPHONE LOGIC ---
         micBtn.onclick = async () => {
@@ -398,7 +396,7 @@
                 .attr("class", "confidence-area")
                 .attr("d", d => areaGenerator(d.values)) // generator sources values.low and .high to generate area
                 .attr("fill", d => colorScale(d.id))
-                .attr("opacity", 0.1);
+                .attr("opacity", 0.2);
 
             // 3. append line graph to each group
             groups.append("path")
@@ -525,45 +523,66 @@
                 textCol.appendChild(ctxLabel);
     
                 // G. Add Toggle Functionality
-                btn.onclick = () => {
-                if (isolatedParamId === s.id) {
-                    // TURN ALL BACK ON
-                    isolatedParamId = null;
-                    
-                    // 1. Reset SVG Graphs
-                    d3.selectAll(".parameter-group").transition().duration(200).style("opacity", 1);
-                    
-                    // 2. Reset ALL HTML Buttons (Remove dimming)
-                    for (let i=0; i<7; i++) {
-                        const b = document.getElementById(`btn-param-${i}`);
-                        if (b) {
-                            b.classList.remove("opacity-40");
-                            b.classList.remove("grayscale");
-                        }
-                    }
-                } else {
-                    // ISOLATE THIS PARAMETER
-                    isolatedParamId = s.id;
-            
-                    // 1. Fade all SVG graphs except this one
+                // Helper function to isolate visually
+                const isolateVisuals = (targetId) => {
+                    // Fade SVG graphs
                     d3.selectAll(".parameter-group").transition().duration(200).style("opacity", 0.05);
-                    d3.select(`.param-${s.id}`).transition().duration(200).style("opacity", 1);
-            
-                    // 2. Fade all HTML buttons except this one
-                    for (let i=0; i<7; i++) {
+                    d3.select(`.param-${targetId}`).transition().duration(200).style("opacity", 1);
+                    
+                    // Dim HTML buttons
+                    for (let i = 0; i < 7; i++) {
                         const b = document.getElementById(`btn-param-${i}`);
                         if (b) {
-                            if (i === s.id) {
-                                b.classList.remove("opacity-40");
-                                b.classList.remove("grayscale");
+                            if (i === targetId) {
+                                b.classList.remove("opacity-40", "grayscale");
+                                b.classList.add("border-slate-500"); // Add highlight border
                             } else {
-                                b.classList.add("opacity-40");
-                                b.classList.add("grayscale");
+                                b.classList.add("opacity-40", "grayscale");
+                                b.classList.remove("border-slate-500");
                             }
                         }
                     }
-                }
-            }
+                };
+
+                // Helper function to reset visuals
+                const resetVisuals = () => {
+                    d3.selectAll(".parameter-group").transition().duration(200).style("opacity", 1);
+                    for (let i = 0; i < 7; i++) {
+                        const b = document.getElementById(`btn-param-${i}`);
+                        if (b) {
+                            b.classList.remove("opacity-40", "grayscale", "border-slate-500");
+                        }
+                    }
+                };
+
+                // HOVER: Temporarily isolate if nothing is locked
+                btn.onmouseenter = () => {
+                    if (lockedParamId === null) isolateVisuals(s.id);
+                };
+
+                // LEAVE: Reset if nothing is locked, or return to locked state
+                btn.onmouseleave = () => {
+                    if (lockedParamId === null) {
+                        resetVisuals();
+                    } else {
+                        isolateVisuals(lockedParamId);
+                    }
+                };
+
+                // CLICK: Toggle lock state
+                btn.onclick = () => {
+                    if (lockedParamId === s.id) {
+                        // Unlock
+                        lockedParamId = null;
+                        resetVisuals();
+                        isolatedParamId = null; // Update for the D3 invisible overlay tooltip
+                    } else {
+                        // Lock
+                        lockedParamId = s.id;
+                        isolateVisuals(s.id);
+                        isolatedParamId = s.id; // Update for the D3 invisible overlay tooltip
+                    }
+                };
 
                 // H. Final Assembly: Attach Dot and TextWrapper to Button
                 btn.appendChild(dot);
@@ -590,13 +609,11 @@
             let progressSeconds = 0;
             const progressInterval = setInterval(() => {
                 progressSeconds++;
-                if (progressSeconds === 10) statusText.innerText = "Cold Start…";
-                if (progressSeconds === 15) statusText.innerText = "Booting system...";
-                if (progressSeconds === 20) statusText.innerText = "Processing...";
+                if (progressSeconds === 10) statusText.innerText = "Running inference…"                
                 }, 1000);
 
             try {
-                const response = await fetch('http://bape-alb-2077306730.eu-central-1.elb.amazonaws.com/acou-vec/generate', { method: 'POST', body: formData });
+                const response = await fetch('http://bape-alb-2083461394.eu-central-1.elb.amazonaws.com/acou-vec/generate', { method: 'POST', body: formData });
                 
                 debugger;
 
