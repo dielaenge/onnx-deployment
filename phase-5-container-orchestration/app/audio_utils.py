@@ -88,36 +88,36 @@ def normalize_with_ffmpeg(audio_bytes: bytes, target_sr: int = 16000) -> np.ndar
             os.remove(output_path)
 
 
-# slicing the audio input into 4 second chunks with 2 seconds overlap
-def slice_audio_to_chunks(audio_array: np.ndarray, sr=16000):
-    window_size = 4 * sr
-    stride_size = 2 * sr
+# deactivated the old slicing mechanism; now slicing spectrogram instead of raw audio_array
+# def slice_audio_to_chunks(audio_array: np.ndarray, sr=16000):
+#     window_size = 4 * sr
+#     stride_size = 2 * sr
 
-    slices = []
-    timestamps = []
+#     slices = []
+#     timestamps = []
 
-    for i in range(0, len(audio_array), stride_size):
-        # define slice size
-        start = i
-        end = i + window_size
-        chunk = audio_array[start:end]
+#     for i in range(0, len(audio_array), stride_size):
+#         # define slice size
+#         start = i
+#         end = i + window_size
+#         chunk = audio_array[start:end]
 
-        # pad end of chunk if slice is smaller than 4 seconds
-        if len(chunk) < window_size:
-            padding_needed = window_size - len(chunk)
-            chunk = np.pad(chunk, (0, padding_needed), mode="constant")
+#         # pad end of chunk if slice is smaller than 4 seconds
+#         if len(chunk) < window_size:
+#             padding_needed = window_size - len(chunk)
+#             chunk = np.pad(chunk, (0, padding_needed), mode="constant")
 
-        # add chunk to list of slices
-        slices.append(chunk)
+#         # add chunk to list of slices
+#         slices.append(chunk)
 
-        # add timestamps in seconds (i / sample rate)
-        timestamps.append(i / sr)
+#         # add timestamps in seconds (i / sample rate)
+#         timestamps.append(i / sr)
 
-        # prevent producing empty windows by breaking when the audio_array is exceeded
-        if end >= len(audio_array):
-            break
+#         # prevent producing empty windows by breaking when the audio_array is exceeded
+#         if end >= len(audio_array):
+#             break
         
-    return slices, timestamps
+#   return slices, timestamps
 
 # generating the spectrogram image 
 def generate_spectrogram_image(spectrogram_2d: np.ndarray) -> str:
@@ -139,6 +139,7 @@ def generate_spectrogram_image(spectrogram_2d: np.ndarray) -> str:
     plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
     plt.close() #close plot to save memory
     spectrogram_png=buf.getvalue()
+
     return spectrogram_png #returns png in bytes
 
 # --- Preprocessing class `MelSpectrogram` copied from [BAPE repository: bape/src/util/signals.py](https://github.com/philipp-goetz/bape/blob/7988f939d1c69301e31d322fecbbaa2a031ef3e1/src/util/signals.py) and adapted (see comments) for deployment---
@@ -164,7 +165,7 @@ class MelSpectrogram:
         # self.freqs = mel_frequencies(n_mels=n_mels, fmin=fmin, fmax=fmax) #not used in the __call__ function
     
     def __call__(self, input_signal: np.ndarray) -> np.ndarray:
-        """Takes 1D audio signal as input and returns the melspectrogram as a 2D numpy array."""
+        """Takes 1D audio signal as input and returns the melspectrogram as tensor."""
 
         # From here until `return` statement code is copied from BAPE repo
         spec = melspectrogram(
@@ -197,9 +198,55 @@ melspec_preprocessor = MelSpectrogram(
     fmin=20, 
     fmax=8000, 
     power=2.0, 
-    log_mag=True, 
-    trunc=2000
-)
+    log_mag=True
+    )
+
+def slice_spectrogram(standardized_spectrogram):
+    # the model expects spectrograms 2000 frames wide ( 4 seconds )
+    window_frames = 2000
+    # we want to create overlapping spectrograms
+    # subsequent spectrograms contain latter half of predecessor
+    stride_frames = 1000
+
+    # create empty lists for slices and timestamps
+    slices=[]
+    timestamps_sec=[]
+
+    # store amount of total frames; shape[1]
+    total_frames = standardized_spectrogram.shape[1]
+
+    # loop step by step through entire input range, start at 0, end at end of input, move in stride_frames / 2 second steps
+    for step in range(0, total_frames, stride_frames):
+        # set start and end for step
+        start = step
+        end = step + window_frames
+
+        # extract 2D chunk from entire input (select all rows (1), and columns from start to end [16, 2000])
+        chunk = standardized_spectrogram[:,start:end]
+
+        # if last step is bigger than remaining input
+        if chunk.shape[1] < window_frames :
+            # how much input is missing for a full window?
+            padding_required = window_frames - chunk.shape[1]
+            # pad remaining input:
+            # no vertical padding
+            # only horizontal padding_required to the right
+            chunk = np.pad(chunk, ((0,0), (0, padding_required)), mode="constant")
+        
+        # append chunk to slices
+        slices.append(chunk)
+
+        # calculate timestamp second for this step // 2000 frames = 4 secs; 1 sec = 500 frames
+        timestamp_sec = step / 500
+        timestamps_sec.append(timestamp_sec)
+
+        # break when end exceeds total amount of frames
+        if end > total_frames:
+            break
+
+    return slices, timestamps_sec
+
+
 
 def preprocess_audio(audio_bytes: bytes): #in phase 3 this was a path but after adding the normalization function it expects raw audio bytes
     """Preprocesses audio and returns normalized wav, spectrogram as array and png."""
@@ -210,31 +257,34 @@ def preprocess_audio(audio_bytes: bytes): #in phase 3 this was a path but after 
         
         input_duration = len(audio_array)/16000
 
-        #generate one full spectrogram
+        #generate one full spectrogram (tensor)
         raw_spectrogram = melspec_preprocessor(audio_array)
 
-        # standardize raw spectrogram
+        # calculate mean and standard
         mean = raw_spectrogram.mean()
         std = raw_spectrogram.std()
 
-        standardized_spectrogram = (raw_spectrogram - mean) / (std + 1e-8)
+        # standardize raw spectrogram tensor
+        standardized_spectrogram = (raw_spectrogram - mean) / (std + 1e-12)
 
-        # gnerate PNG from standarized spectrogram
+        # generate PNG (binary) from standarized spectrogram
         std_spectrogram_png = generate_spectrogram_image(standardized_spectrogram)
         
-        # ---TBD: slicing loging incomplete!!---
-        final_spectrogram = standardized_spectrogram[:, :2000]
+        # slice full spectrogram; 
+        slices, timestamps = slice_spectrogram(standardized_spectrogram)
 
-        # expand spctrogram tensor from 2D to 4D
-        batched_spectrograms_4d = final_spectrogram.unsqueeze(0).unsqueeze(0)
-        batched_spectrograms_4d = batched_spectrograms_4d.numpy() # convert to numpy array for ONNX runtime
+        # batch slices into one 3D array (N, 16, 2000)
+        batched_spectrograms_3d = np.stack(slices, axis=0)
 
+        # add channel dimension at index 1
+        batched_spectrograms_4d = np.expand_dims(batched_spectrograms_3d, axis=1)
+        
         # Return 
         # - final numpy array (batched_spectrograms_4d)
         # - normalized wav (clean_wav)
         # - spectrogram for entire input (spectrogram_png)
         # - timestamps in seconds (timestamps) – necessary for correct visualization
-        return batched_spectrograms_4d, clean_wav, std_spectrogram_png, [0.0], input_duration
+        return batched_spectrograms_4d, clean_wav, std_spectrogram_png, timestamps, input_duration
     
     except Exception as e:
         logging.error(f"Spectrogram generation failed: {e}")

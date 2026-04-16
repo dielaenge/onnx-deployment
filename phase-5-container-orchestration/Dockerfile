@@ -21,17 +21,16 @@ RUN apt-get update \
     libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-# copy files to /app
-COPY onnx/ onnx/
-COPY src/ src/
-COPY api.py .
+# copy requirements and install dependencies
 COPY requirements.txt .
 
-# install CPU-only dependencies for torch to save space and time / download from explicit url to avoid dowonloading cuda backend; step separated from dependency installations to prevent conflicts
+#install CPU-only dependencies for torch to save space and time / download from explicit url to avoid dowonloading cuda backend; step separated from dependency installations to prevent conflicts
 RUN pip install --upgrade pip \ 
-    && pip install torch==2.2.2 torchaudio==2.2.2 --index-url https://download.pytorch.org/whl/cpu \
+    && pip install torch==2.2.2 torchaudio==2.2.2 --index-url https://download.pytorch.org/whl/cpu \ 
     && pip install --no-cache-dir -r /app/requirements.txt
 
+# copy code
+COPY app/ app/
 
 # set env variables
 ENV PORT=8080
@@ -39,5 +38,5 @@ ENV NUMBA_CACHE_DIR=/tmp
 ENV JOBLIB_TEMP_FOLDER=/tmp
 
 # Start the application
-# look for the app object in api.py
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8080"]
+# look for the app object in app/main.py
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]

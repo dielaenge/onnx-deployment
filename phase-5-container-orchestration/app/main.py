@@ -3,6 +3,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import time
 import json
@@ -16,8 +17,6 @@ BASE_DIR = Path(__file__).resolve().parent
 from .inference_engine import AcousticModelProcessor
 from .audio_utils import preprocess_audio
 
-
-
 # --- Logging Setup ---
 logging.basicConfig(
     level=logging.INFO,
@@ -27,6 +26,14 @@ logger = logging.getLogger("API")
 
 app = FastAPI(title="BAPE API")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # should be restricted to CloudFront URL
+    allow_credentials=True,
+    allow_methods=["*"], # Allows POST, GET, OPTIONS, etc.
+    allow_headers=["*"], # Allows Content-Type, Authorization, etc.
+)
+
 # S3 BRIDGE
 def upload_artifact_and_get_presigned_url(file_bytes: bytes, object_key: str, content_type:str):
     """
@@ -34,14 +41,14 @@ def upload_artifact_and_get_presigned_url(file_bytes: bytes, object_key: str, co
     """
 
     # set bucket as env var
-    bucket_name="bape-lambda-static-frontend"
+    BUCKET_NAME=os.environ.get("APP_BUCKET_NAME")
     # initialize S3 client
     s3_client = boto3.client('s3')
     # Safe object to S3
     try:
         # 1. put_object for raw bytes
         s3_client.put_object(
-            Bucket=bucket_name,
+            Bucket=BUCKET_NAME,
             Key=object_key,
             Body=file_bytes,
             ContentType=content_type
@@ -50,7 +57,7 @@ def upload_artifact_and_get_presigned_url(file_bytes: bytes, object_key: str, co
         # 2. Generate presigned URL
         url = s3_client.generate_presigned_url(
             'get_object',
-            Params={'Bucket': bucket_name, 'Key': object_key},
+            Params={'Bucket': BUCKET_NAME, 'Key': object_key},
             # Presigned URL expires after 5 minutes
             ExpiresIn=300,
         )
@@ -62,8 +69,8 @@ def upload_artifact_and_get_presigned_url(file_bytes: bytes, object_key: str, co
     
 
 # --- Model init (happens once at server startup) ---
-MODEL_PATH = BASE_DIR.parent / "models" / "bape_v2_standardized.onnx"
-print(f"DEBUG: Loading model from {MODEL_PATH}")
+MODEL_PATH = BASE_DIR / "models" / "bape_2026-04-13_15-13-22.onnx"
+#print(f"DEBUG: Loading model from {MODEL_PATH}")
 
 processor = None
 try:
@@ -145,8 +152,8 @@ async def call_bape_api(audio_file: UploadFile = File(...)):
     logger.info("Inference complete for %s. Time: %s.3f ms", audio_file.filename, processing_time_ms)
 
     # 6. API respone: Map batch results to timestamps
-    batch_fingerprints = model_outputs['latent_vector'] # shape is (N,1024); was (1, 1024)
-    batch_estimated_params = model_outputs['estimated_params'] # shape is (N,7,3); was (1,7,3) for estimated_params
+    batch_fingerprints = model_outputs['latents'] # shape is (N,1024); was (1, 1024)
+    batch_estimated_params = model_outputs['params'] # shape is (N,7,3); was (1,7,3) for estimated_params
     batch_quantiles  = model_outputs['quantiles'] # shape is (N,6,2); (1,6,2)
 
     # map each timestampt to a result
@@ -165,7 +172,7 @@ async def call_bape_api(audio_file: UploadFile = File(...)):
     return {
         "request_metadata": {        
             "filename": audio_file.filename,
-            "input_duration": input_duration,
+            "input_duration": f"{round(input_duration,2)} seconds",
             "processing_time_ms": round(processing_time_ms, 3)
         },
 
@@ -179,4 +186,4 @@ async def call_bape_api(audio_file: UploadFile = File(...)):
 
 # LAUNCH
 if __name__ == "__main__":
-    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
