@@ -1,5 +1,4 @@
 # Backend Config
-
 terraform {
   backend "s3" {
     bucket       = "bape-tf-state-davidg-2026"
