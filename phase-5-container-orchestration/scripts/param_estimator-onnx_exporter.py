@@ -1,5 +1,7 @@
 import sys
 import os
+from pathlib import Path
+from datetime import datetime
 
 import librosa
 import torch
@@ -7,24 +9,39 @@ import torch.nn as nn
 import numpy as np
 from omegaconf import OmegaConf
 
-#---workaround becuase exporter esccript is in subfolder
+# --- Path logic ---
 # Get directory of this script
-script_dir = os.path.dirname(os.path.abspath(__file__))
-# Get the project root (one level up)
-project_root = os.path.abspath(os.path.join(script_dir, ".."))
+SCRIPT_DIR = Path(__file__).resolve().parent
+
+# Get project root director
+PROJECT_ROOT = SCRIPT_DIR.parent
+
 # Add the project root to the search path
-if project_root not in sys.path:
-    sys.path.append(project_root)  
-print(f"DEBUG: Project root is: {project_root}.\nScript running from {script_dir}")
+if PROJECT_ROOT not in sys.path:
+    sys.path.append(str(PROJECT_ROOT))  
+print(f"DEBUG: Project root is: {PROJECT_ROOT}.\nScript running from {SCRIPT_DIR}.\n")
+print(f"DEBUG: Script running from {SCRIPT_DIR}.\n")
 
-from src.bape.src.util.signals import MelSpectrogram
-from src.bape.src.model.param_estimator import ParameterEstimator as OriginalEstimator
+from scripts.bape_local.src.util.signals import MelSpectrogram
+from scripts.bape_local.src.model.param_estimator import ParameterEstimator as OriginalEstimator
 
-from src.bape.src.model.speech_encoder import SpeechEncoder
-from src.bape.src.model.cnn2d import CNNEncoder
-from src.bape.src.model.seq import SequenceModel
-from src.bape.src.util.layers import SelfAttentionPooling
-from src.bape.src.model.mlp import RegressionHead
+from scripts.bape_local.src.model.speech_encoder import SpeechEncoder
+from scripts.bape_local.src.model.cnn2d import CNNEncoder
+from scripts.bape_local.src.model.seq import SequenceModel
+from scripts.bape_local.src.util.layers import SelfAttentionPooling
+from scripts.bape_local.src.model.mlp import RegressionHead
+
+# Define all I/O paths (bape repository must be vendored to src/bape_local)
+ESTIMATOR_WEIGHTS_PATH = ( PROJECT_ROOT / "scripts" / "bape_local" / "weights" / "param" / "2025-11-18_17-40-57" / "model.pth" )
+
+ENCODER_WEIGHTS_PATH = ( PROJECT_ROOT / "scripts" / "bape_local" / "weights" / "speech_encoder" / "2025-11-03_17-27-17" /"model.pth" )
+
+REF_AUDIO_PATH = ( PROJECT_ROOT / "src" / "wet_speech.wav" )
+
+timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+EXPORTED_ONNX_PATH = ( PROJECT_ROOT / "app" / "models" / f"bape_{timestamp}.onnx" )
+
+
 
 # I. Assembling the model, the architectural shell, from scratch
 
@@ -114,7 +131,7 @@ class SuperParameterEstimator(OriginalEstimator):
     
     def forward(self, x):
     
-    #we want to get the 'z' value defined in `bape/src/model/param_estimator.py`, which is the `latent` output of the speech encoder model
+    #we want to get the 'z' value, which is the `latent` output of the speech encoder model
 
         # Run the internal SpeechEncoder to get the latent vector 'z'
         if self._freeze_encoder:
@@ -146,17 +163,12 @@ class SuperParameterEstimator(OriginalEstimator):
         else:
             quantiles_adjusted = None
         
-        #differing from the OriginalEstimator / ParameterEstimator we return 'z' (acoustic fingerprint) AND 'outputs' (params)
+        #differing from the OriginalEstimator / ParameterEstimator we return 'z' (latent / acoustic fingerprint) AND 'outputs' (params)
         return z, output, quantiles_adjusted
     
 print("`SuperParameterEstimator` class defined.")
 
-print("Step 2: Instantiating the `SuperParameterEstimator` class as `param_estimator_model`.")
-
-# We run this exporter script from within the onnx folder but torch.load() and ()open look in the current working directory – this has to be fixed with os.path.join(); we can use our project_root whi is defined at the top for this 
-
-ESTIMATOR_WEIGHTS_PATH = os.path.join(project_root, "src/bape/weights/param_estimator_weights_2025-11-18_17-40-57/model.pth")
-ENCODER_WEIGHTS_PATH = os.path.join(project_root, "src/bape/weights/speech_encoder_weights_2025-11-03_17-27-17/model.pth")
+print("\nStep 2: Instantiating the `SuperParameterEstimator` class as `param_estimator_model`.")
 
 param_estimator_model = SuperParameterEstimator(
     encoder_state= ENCODER_WEIGHTS_PATH,
@@ -172,12 +184,12 @@ param_estimator_model = SuperParameterEstimator(
         "output_act": "relu"
         }
 )
-print(f"Model instantiated with speech_encoder state from {ENCODER_WEIGHTS_PATH} as `param_estimator_model`.\nNow loading param_estimator weights…")
+print(f"\nPyTorch model instantiated with speech_encoder state from {ENCODER_WEIGHTS_PATH} as `param_estimator_model`.")
 
 
 # III. Load weights into model
 
-print(f"Step 3: Loading pre-trained weights from {ESTIMATOR_WEIGHTS_PATH}")
+print(f"\n\nStep 3: Loading pre-trained weights from {ESTIMATOR_WEIGHTS_PATH}")
 
 # #load the weights file into a dict (as ONNX requires this)
 state_dict = torch.load(ESTIMATOR_WEIGHTS_PATH, map_location="cpu")
@@ -187,16 +199,18 @@ state_dict = torch.load(ESTIMATOR_WEIGHTS_PATH, map_location="cpu")
 
 # Loading the state_dict into the model. strict=True ensures only perfect matches
 param_estimator_model.load_state_dict(state_dict, strict=False)
-print("Weights loaded successfully.")
+print("Done.")
+
+# TBD: MISSING ERROR STATEMENTS
 
 #set the model to evaluation mode (≠training mode)
 param_estimator_model.eval()
-print("Model set to evaluation mode.")
+print("\nModel set to evaluation mode.")
 
 # II. Instantiate a MelSpectrogram object
 
-print(f"Step 4: Prepare input for onnx export.")
-print("Instantiate MelSpectrogram object `preprocessor`…")
+print(f"\n\nStep 4: Prepare input for onnx export.")
+print("Instantiating MelSpectrogram object `preprocessor`…")
 
 preprocessor = MelSpectrogram(
   sr= 16000,
@@ -210,52 +224,61 @@ preprocessor = MelSpectrogram(
   trunc= 2000
 )
 
-print("…load reference audio…")
-
-# as with weight files, the path has to be fixed
-REF_AUDIO_PATH = os.path.join(project_root, "src/wet_speech.wav")
+print("…done.\nLoading reference audio…")
 
 ref_audio, _ = librosa.load(REF_AUDIO_PATH, sr=16000)
-print(f"Loaded ref_audio from {REF_AUDIO_PATH} with shape {ref_audio.shape}")
+print(f"…done.\nReference audio loaded from {REF_AUDIO_PATH} with shape {ref_audio.shape}.\nTransforming to MelSpectrogram…")
 
 preprocessed_2d_tensor = preprocessor(ref_audio)
 print(f"Transformed ref_audio to 2D Spectrogram with shape: {preprocessed_2d_tensor.shape}.\nStandardizing…")
 preprocessed_2d_tensor = (preprocessed_2d_tensor - preprocessed_2d_tensor.mean()) / (preprocessed_2d_tensor.std() + 1e-8)
-print(f"Done.\nAdding Dimensions…")
+print(f"…done.\nAdding Dimensions…")
 
 final_4d_tensor = preprocessed_2d_tensor.unsqueeze(0).unsqueeze(0)
-print(f"Done.\nInput ready for onnx export. Shape is {final_4d_tensor.shape} and should be [Batch = 1, Channel = 1, Height = 16, Width= 2000].\nRunning unit test to verify…\n")
+print(f"…done.\nInput ready for onnx export. Shape is {final_4d_tensor.shape} and should be [Batch = 1, Channel = 1, Height = 16, Width= 2000].\nRunning unit test to verify…\n")
 
 # --- THE SELF-TEST ---
 with torch.no_grad():
     z, output, quantiles = param_estimator_model(final_4d_tensor)
-    print("\n--- UNIT TEST: FIRST BLIND ESTIMATED PARAM AND CONFIDENCE RANGE FROM ONNX EXPORT VS REFERENCE PYTORCH---")
+
+    reference = [0.4660, 0.5458, 0.8592]
+    actual = output[0, 0, :3]
+    actual_np = actual.numpy()
+
+    tolerance = 0.05
+
+    print("\n--- UNIT TEST: COMPARING INFERENCE RESULTS OF PYTORCH MODEL AGAINST REFERENCE RESULTS---")
     print(f"EXPORT: {[f'{value:.4f}' for value in output[0, 0, :3]]}")
     print("REFERENCE: [0.4660, 0.5458, 0.8592]")
-    print("---------------------------------------\n")
+    
+    if np.allclose(actual_np, reference, atol=tolerance, rtol=0):
+        print(f"All values within {tolerance} tolerance. Unit test passed.")
+        print("---------------------------------------\n")
 
-# IV. Performing the export
-print("Step 4: Exporting the model to ONNX")
-EXPORTED_MODEL_PATH = "onnx/bape_v2_standardized.onnx" 
+        # IV. Performing the export
+        print("Step 4: Exporting model to ONNX…")
 
-torch.onnx.export(
-    param_estimator_model,
-    final_4d_tensor,
-    EXPORTED_MODEL_PATH,
-    input_names=['input_spectogram'],
-    output_names=['latent_vector', 'estimated_params', 'quantiles'],
-    opset_version=18,
-    dynamic_axes={ 
-        'input_spectogram': {0 : 'batch_size'},
-        'latent_vector' : {0 : 'batch_size'},
-        'estimated_params' : {0 : 'batch_size'},
-        'quantiles' : {0 : 'batch_size'}
-    # Python will return an information about the more modern approach: 
-    # dynamic_shapes = {
-    #    'x': {0:torch.export.Dim("batch_size")}
-    #} 
-    },
-    dynamo=True
-)
+        torch.onnx.export(
+            param_estimator_model,
+            final_4d_tensor,
+            EXPORTED_ONNX_PATH,
+            input_names=['input_spectrogram'],
+            output_names=['latents', 'params', 'quantiles'],
+            opset_version=17,
+            dynamic_axes={ 
+                'input_spectrogram': {0 : 'batch_size'},
+                'latents' : {0 : 'batch_size'},
+                'params' : {0 : 'batch_size'},
+                'quantiles' : {0 : 'batch_size'}
+            },
+            dynamo = True,
+            report = True
+        )
 
-print(f"SUCCESS: Super Model exported to {EXPORTED_MODEL_PATH}.")
+        print(f"SUCCESS: Super Model exported to {EXPORTED_ONNX_PATH}.")
+    else:
+        print("Unit test failed: Model output not within tolerance.\nExport cancelled.")
+        print("---------------------------------------\n")
+    
+
+
