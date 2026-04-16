@@ -1,0 +1,13 @@
+_target_: src.model.param_estimator.ParameterEstimator
+
+encoder_state: logs/vae/2025-11-02_17-44-22/model.pth
+freeze_encoder: false
+reset_encoder: false
+quantiles: null
+p_drop: 0.325
+estimator:
+  input_dim: 1024
+  hidden_dim: 64
+  num_blocks: 4
+  output_dim: 7
+  output_act: relu

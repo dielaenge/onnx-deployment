@@ -1,0 +1,41 @@
+_target_: src.pipe.speech.generate
+
+# sample rate [Hz]
+fs: 48000
+# segment duration in seconds
+duration: 8
+# train, valid, test
+num_samps: [0, 0, 512]
+# snr range in dB
+snr_range: [12, 48]
+# path to rir data
+rir_path: data/mouth_eq_rirs.pkl
+# path to speech files (change to point to your ears dataset)
+speech_path: ../data/speech/ears_dataset/
+# filename of generated webdataset
+out_path: data/dataset_mouth_eq_8s/
+# set False for dbg
+write_flag: true
+
+speech_representation:
+  _target_: src.util.signals.MelSpectrogram
+  sr: 48000
+  n_fft: 1024
+  hop_size: 512
+  n_mels: 64
+  fmin: 20.0
+  fmax: 20000
+  power: 0.3
+  trunc: null
+
+rir_representation:
+  _target_: src.util.signals.MelSpectrogram
+  sr: 48000
+  n_fft: 512
+  hop_size: 128
+  n_mels: 64
+  fmin: 20
+  fmax: 20000
+  power: 0.3
+  log_mag: false
+  trunc: 512
