@@ -226,6 +226,12 @@ see [Inference Debugging Notes / artifacts on branch `debug/`](inference-debuggi
 - refactoring `audio_utils.py` to use fixed preprocessing on *moving window/time-sliced* input
   - the fix (standardization) must be applied to the *entire* spectrogram, *before* slicing
 
+- Back at `commit 042b8ed`
+- pulled changes made on IntelMB
+
+- refactoring `audio_utils.py` to use fixed preprocessing on *moving window/time-sliced* input
+  - the fix (standardization) must be applied to the *entire* spectrogram, *before* slicing
+
 ```mermaid
 flowchart LR
 

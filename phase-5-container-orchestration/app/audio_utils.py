@@ -92,10 +92,21 @@ def normalize_with_ffmpeg(audio_bytes: bytes, target_sr: int = 16000) -> np.ndar
 # def slice_audio_to_chunks(audio_array: np.ndarray, sr=16000):
 #     window_size = 4 * sr
 #     stride_size = 2 * sr
+# deactivated the old slicing mechanism; now slicing spectrogram instead of raw audio_array
+# def slice_audio_to_chunks(audio_array: np.ndarray, sr=16000):
+#     window_size = 4 * sr
+#     stride_size = 2 * sr
 
 #     slices = []
 #     timestamps = []
+#     slices = []
+#     timestamps = []
 
+#     for i in range(0, len(audio_array), stride_size):
+#         # define slice size
+#         start = i
+#         end = i + window_size
+#         chunk = audio_array[start:end]
 #     for i in range(0, len(audio_array), stride_size):
 #         # define slice size
 #         start = i
@@ -106,17 +117,24 @@ def normalize_with_ffmpeg(audio_bytes: bytes, target_sr: int = 16000) -> np.ndar
 #         if len(chunk) < window_size:
 #             padding_needed = window_size - len(chunk)
 #             chunk = np.pad(chunk, (0, padding_needed), mode="constant")
+#         # pad end of chunk if slice is smaller than 4 seconds
+#         if len(chunk) < window_size:
+#             padding_needed = window_size - len(chunk)
+#             chunk = np.pad(chunk, (0, padding_needed), mode="constant")
 
 #         # add chunk to list of slices
 #         slices.append(chunk)
+#         # add chunk to list of slices
+#         slices.append(chunk)
 
-#         # add timestamps in seconds (i / sample rate)
-#         timestamps.append(i / sr)
+# #         # add timestamps in seconds (i / sample rate)
+# #         timestamps.append(i / sr)
 
-#         # prevent producing empty windows by breaking when the audio_array is exceeded
-#         if end >= len(audio_array):
-#             break
+# #         # prevent producing empty windows by breaking when the audio_array is exceeded
+# #         if end >= len(audio_array):
+# #             break
         
+#   return slices, timestamps
 #   return slices, timestamps
 
 # generating the spectrogram image 
@@ -165,6 +183,7 @@ class MelSpectrogram:
         # self.freqs = mel_frequencies(n_mels=n_mels, fmin=fmin, fmax=fmax) #not used in the __call__ function
     
     def __call__(self, input_signal: np.ndarray) -> np.ndarray:
+        """Takes 1D audio signal as input and returns the melspectrogram as tensor."""
         """Takes 1D audio signal as input and returns the melspectrogram as tensor."""
 
         # From here until `return` statement code is copied from BAPE repo
@@ -258,12 +277,16 @@ def preprocess_audio(audio_bytes: bytes): #in phase 3 this was a path but after 
         input_duration = len(audio_array)/16000
 
         #generate one full spectrogram (tensor)
+        #generate one full spectrogram (tensor)
         raw_spectrogram = melspec_preprocessor(audio_array)
 
+        # calculate mean and standard
         # calculate mean and standard
         mean = raw_spectrogram.mean()
         std = raw_spectrogram.std()
 
+        # standardize raw spectrogram tensor
+        standardized_spectrogram = (raw_spectrogram - mean) / (std + 1e-12)
         # standardize raw spectrogram tensor
         standardized_spectrogram = (raw_spectrogram - mean) / (std + 1e-12)
 
