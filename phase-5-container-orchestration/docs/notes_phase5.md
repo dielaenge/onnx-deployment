@@ -226,11 +226,57 @@ see [Inference Debugging Notes / artifacts on branch `debug/`](inference-debuggi
 - refactoring `audio_utils.py` to use fixed preprocessing on *moving window/time-sliced* input
   - the fix (standardization) must be applied to the *entire* spectrogram, *before* slicing
 
-- Back at `commit 042b8ed`
-- pulled changes made on IntelMB
+- refactored phase 5 structure into app/, scripts/ and terraform/
 
-- refactoring `audio_utils.py` to use fixed preprocessing on *moving window/time-sliced* input
-  - the fix (standardization) must be applied to the *entire* spectrogram, *before* slicing
+- refactored main.py to get frontend from phase 5 S3 bucket via environment variable `PHASE5_S3BUCKET`
+
+- built, tagged and pushed refactored / fixed Docker image to ECR
+
+
+--- getting back to terraform
+
+- rerun init – [WHY?](https://developer.hashicorp.com/terraform/cli/commands/init)
+- I'm not sure if my `terraform/terraform.lock.hcl` is commited to the github repo which is required to ensure consistent tf runs in different environments 
+
+- created `aws_ecs_cluster.bape_cluster`, requires only `name`
+
+- go on to build ecs service
+  - manages the containers
+  - In Terraform, when a resource argument expects a reference to another resource, it almost always wants the .id or .arn
+  - connect service to task definition, cluster, load balancer; declare launch type, desired count
+
+  - requires 
+    - `network_configuration{}`:
+      - in which subnets to run
+      - attach security groups
+
+  - we require
+    - `load_balancer{}`
+      - attach target group
+      - state `container_name`, as in `aws_ecs_task_definition.task_definition_bape`
+      - define container_port
+
+---
+
+Trying to retrace what I did, as the inference debugging was a long break before coming back to Terraform and AWS:
+> *An HTTP POST is sent, the request containing a 4-second .wav file to our Application Load Balancer's DNS name.*
+> *What's the exact journey of that packet through the AWS infrastructure, how it gets processed, and how the response gets back?"*
+
+- bape_alb is spread across pub-sn-A and pub-sn-B --REQUEST--> bape_alb_sg allows all traffic to ALB, forwards it as HTTP --REQUEST--> prv-sn-A / prv-sn-B, where Fargate and S3 Endpoints live
+
+- REQUEST reaches Fargate endpoint on port 8080, and calls the acou-vec/generate endpoint
+
+- Fargate provides 1 container to run the task, which preprocesses the wav input, starts the inference engine feeds it with the preprocessed spectrogram inputs, and returns the JSON result
+
+- Fargate containers are only available for traffic from the bape ALB SG but I don't udnerstand teh egress
+  - how do they respond to the client?
+
+---
+
+- create `cdn.tf` for phase 5 frontend infra
+  - CloudFront distribution using an S3 origin
+  - 
+
 
 ```mermaid
 flowchart LR
