@@ -435,12 +435,12 @@ resource "aws_ecs_task_definition" "task_definition_bape" {
   task_role_arn            = aws_iam_role.ecs_task_role.arn
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = 256
-  memory                   = 512
+  cpu                      = 1024
+  memory                   = 2048
   container_definitions = jsonencode([
     {
       name      = "bape-container"
-      image     = "${aws_ecr_repository.bape-inference-tf.repository_url}ape-inference-tf:v3.0.0-cloudfront-edge"
+      image     = "${aws_ecr_repository.bape-inference-tf.repository_url}:v3.0.0-cloudfront-edge"
       essential = true
       portMappings = [
         {
