@@ -273,7 +273,7 @@
       
         let currentTimelineData = null; //store timeline data outside of upload(blob) function
 
-        let lockedParamId = null; //isolated param_id to trigger 
+        let lockedParamId = null; //locked param_id to trigger 
 
         // --- MICROPHONE LOGIC ---
         micBtn.onclick = async () => {
@@ -412,15 +412,17 @@
                 .attr("height", height)
                 .attr("fill", "transparent")
                 .on("mousemove", function(event) {
-                    // Only show tooltip if a parameter is isolated
-                    if (isolatedParamId !== null) {
+                    // Only show tooltip if a parameter is lockedtf
+                        ºº
+                    if (lockedParamId !== null) {
                         const [mouseX, mouseY] = d3.pointer(event); 
                         
                         // Convert pixel to Time
                         const x0 = xScale.invert(mouseX); 
                         
-                        // Find the exact data series that is currently isolated
-                        const activeSeries = seriesData.find(s => s.id === isolatedParamId);
+                        // Find the exact data series that is currently lockedtf
+                            ºº
+                        const activeSeries = seriesData.find(s => s.id === lockedParamId);
                         
                         // Find closest data point
                         const i = bisectTime(activeSeries.values, x0, 1);
@@ -442,7 +444,7 @@
                           .style("top", (pointY - 15) + "px");
 
                         // Update Text
-                        d3.select("#tt-header").text(`${bandLabels[isolatedParamId].freq} (${bandLabels[isolatedParamId].desc})`);
+                        d3.select("#tt-header").text(`${bandLabels[lockedParamId].freq} (${bandLabels[lockedParamId].desc})`);
                         d3.select("#tt-value").html(
                             `Time: ${currentData.time.toFixed(1)}s<br>` +
                             `Estimate: ${currentData.val.toFixed(3)}<br>` +
@@ -575,12 +577,12 @@
                         // Unlock
                         lockedParamId = null;
                         resetVisuals();
-                        isolatedParamId = null; // Update for the D3 invisible overlay tooltip
+                        lockedParamId = null; // Update for the D3 invisible overlay tooltip
                     } else {
                         // Lock
                         lockedParamId = s.id;
                         isolateVisuals(s.id);
-                        isolatedParamId = s.id; // Update for the D3 invisible overlay tooltip
+                        lockedParamId = s.id; // Update for the D3 invisible overlay tooltip
                     }
                 };
 
@@ -613,7 +615,7 @@
                 }, 1000);
 
             try {
-                const response = await fetch('http://bape-alb-2083461394.eu-central-1.elb.amazonaws.com/acou-vec/generate', { method: 'POST', body: formData });
+                const response = await fetch('/acou-vec/generate', { method: 'POST', body: formData });
                 
                 debugger;
 
