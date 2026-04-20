@@ -274,8 +274,25 @@ Trying to retrace what I did, as the inference debugging was a long break before
 ---
 
 - create `cdn.tf` for phase 5 frontend infra
-  - CloudFront distribution using an S3 origin
-  - 
+  - CloudFront distribution using an S3 origin to serv index.html
+
+- `tf apply` resulted in an XML access denied / CORS error
+  - minor fix in `main.py` to solve CORS error: allow only `cloudfront_url` to call it
+
+- after new docker build, tag and push, next `tf apply` resulted in Mixed Content Error and a block by the browser: The browser doesn't allow the index.html from the https address of the cloudfront distribution to call the http-API of the ECS container
+  - fix: CloudFront handles HTTPS and we can put our ALB *behind* the same disrtibution; this way CloudFront operates as a proxy, identifies the HTTP call from the index.html, intercepts it and establishes a secure, certified HTTPS conection
+  - how? 
+    - an `aws_cloudfront_origin_access_control` requires an `origin` statement and can have multiple, so we already have a S3 origin and add a ALB origin, which must be set as a custom origin
+    - update the API link in `fetch()` command in `index.html` to relative path (was *HTTP* ALB DNS before)
+
+- updated runs succeeded but threw an error when bigger files were processed.
+From the Dev Tools console:
+`(index):616  POST https://d2u4x72mj9tix9.cloudfront.net/acou-vec/generate 504 (Gateway Timeout)`
+- Gateway Timeout means CloudFront hit the 30-second timeout limit and assumes the backend is dead
+  - increasing `cpu` and `memory` in the task definition solved the bottleneck
+
+  --> (check container insights to rightsize resources)
+
 
 
 ```mermaid
