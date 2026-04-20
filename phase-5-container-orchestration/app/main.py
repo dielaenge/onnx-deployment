@@ -3,7 +3,6 @@ import boto3
 from botocore.exceptions import ClientError
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import time
 import json
