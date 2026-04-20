@@ -26,14 +26,6 @@ logger = logging.getLogger("API")
 
 app = FastAPI(title="BAPE API")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"], # should be restricted to CloudFront URL
-    allow_credentials=True,
-    allow_methods=["*"], # Allows POST, GET, OPTIONS, etc.
-    allow_headers=["*"], # Allows Content-Type, Authorization, etc.
-)
-
 # S3 BRIDGE
 def upload_artifact_and_get_presigned_url(file_bytes: bytes, object_key: str, content_type:str):
     """
