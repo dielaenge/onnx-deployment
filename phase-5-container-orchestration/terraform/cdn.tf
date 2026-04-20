@@ -47,9 +47,6 @@ resource "aws_cloudfront_origin_access_control" "bape_phase5_oac" {
   signing_protocol                  = "sigv4"
 }
 
-locals {
-  s3_origin_id = "bape-phase5-frontend-s3-distribution"
-}
 
 resource "aws_cloudfront_distribution" "bape_phase5_frontend_s3_distribution" {
   enabled = true
