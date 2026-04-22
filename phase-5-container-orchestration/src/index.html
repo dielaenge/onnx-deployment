@@ -173,7 +173,7 @@
         const resultArea = document.getElementById('result-area');
 
 // ============== MOCK DATA =================
-/* const mockData = {
+ const mockData = {
   "timeline_of_results": [
     {
       "timestamp_step": 0,
@@ -427,7 +427,7 @@
         0.5656464099884033
       ],
       "fingerprint": "processed - output tbd"
-    }]} */
+    }]} 
 // ============== MOCK DATA END =================
 
         const bandLabels = [
@@ -597,16 +597,18 @@
             const maskLeft = svg.append("rect")
                 .attr("y", 20)
                 .attr("height", height - 50)
-                .attr("fill", "rgba(2, 6, 23, 0.7)") // Dark slate color
-                .style("opacity", 0)
+                .attr("x", 50)           // Start at left margin
+                .attr("width", 0)        // add width when calculated on mousemove
+                .attr("fill", "rgba(113,255, 195, 0.3)")
                 .style("pointer-events", "none");
 
             // Dark mask for the right side
             const maskRight = svg.append("rect")
                 .attr("y", 20)
                 .attr("height", height - 50)
-                .attr("fill", "rgba(2, 6, 23, 0.7)") // Dark slate color
-                .style("opacity", 0)
+                .attr("x", width - 20)
+                .attr("width", 0)
+                .attr("fill", "rgba(113,255, 195, 0.3)")
                 .style("pointer-events", "none");
 
             svg.append("rect")
@@ -614,69 +616,51 @@
                 .attr("height", height)
                 .attr("fill", "transparent")
                 .on("mousemove", function(event) {
-                    // Only show tooltip if a parameter is locked
                     if (lockedParamId !== null) {
-                        const [mouseX, mouseY] = d3.pointer(event); 
-                        
-                        // Convert pixel to Time
-                        const x0 = xScale.invert(mouseX); 
-                        
-                        // Find the data series that is currently locked
+                        const [mouseX, _] = d3.pointer(event);
+                        const hoverTime = xScale.invert(mouseX) - 2;
 
+                        // 1. RE-FETCH the active series inside this scope
                         const activeSeries = seriesData.find(s => s.id === lockedParamId);
-                        
-                        // Find closest data point
-                        const i = bisectTime(activeSeries.values, x0, 1);
-                        const d0 = activeSeries.values[i - 1];
-                        const d1 = activeSeries.values[i];
-                        
-                        let currentData = d0;
-                        if (d0 && d1) {
-                            currentData = (x0 - d0.time > d1.time - x0) ? d1 : d0; 
-                        }
-                        // prevent snapping to tail point
+                        if (!activeSeries) return;
+
+                        // 2. RE-CALCULATE maxTime inside this scope
                         const maxTime = d3.max(activeSeries.values, d => d.time);
-                        if (currentData.time === maxTime) {
-                            currentData = activeSeries.values[activeSeries.values.length - 2]; 
-                        }
+                        
+                        // 3. Calculate the nearest window
+                        const nearestWindowStart = Math.max(0, Math.round(hoverTime / 2) * 2 );
+                        const safeWindowStart = Math.min(nearestWindowStart, maxTime);
 
-                        // Snap Coordinates
-                        const pointX = xScale(currentData.time + 2 );
-                        const pointY = yScale(currentData.val);
+                        // 4. Position and Tooltip logic
+                        const windowStartX = xScale(safeWindowStart);
+                        const windowEndX = xScale(Math.min(maxTime + 4, safeWindowStart + 4));
 
+                        const pointX = xScale(safeWindowStart + 2);
+                        const currentData = activeSeries.values.find(v => v.time === safeWindowStart) || activeSeries.values[0];
+                        
                         d3.select("#tooltip")
-                          .style("opacity", 1)
-                          .style("left", pointX + "px")
-                          .style("top", (pointY - 15) + "px");
-
-                        const windowStartX = xScale(currentData.time);
-                        const windowEndX = xScale(currentData.time + 4);
-
-                        // Left curtain: From the Y-axis (x=50) up to the start of the window
-                        maskLeft
-                            .attr("x", 50) 
-                            .attr("width", windowStartX - 50)
+                            .style("left", pointX + "px")
+                            .style("top", (yScale(currentData.val) - 35) + "px")
                             .style("opacity", 1);
 
-                        // Right curtain: From the end of the window up to the end of the chart
-                        maskRight
-                            .attr("x", windowEndX)
-                            .attr("width", (width - 20) - windowEndX) 
-                            .style("opacity", 1);
+                        // Curtains
+                        console.log("Mouse X:", mouseX, "HoverTime:", hoverTime, "SnappedStart:", safeWindowStart);
+                        maskLeft.attr("x", 50).attr("width", Math.max(0, windowStartX - 50));
+                        maskRight.attr("x", windowEndX).attr("width", Math.max(0, (width - 20) - windowEndX));
 
-                        // Update Text
                         d3.select("#tt-header").text(`${bandLabels[lockedParamId].freq} (${bandLabels[lockedParamId].desc})`);
                         d3.select("#tt-value").html(
-                            `Time: ${currentData.time.toFixed(1)}s - ${(currentData.time + 4).toFixed(1)}<br>` +
-                            `Estimate: ${currentData.val.toFixed(3)}<br>` +
-                            `<span class="text-slate-500 text-[10px]">Range: [${currentData.low.toFixed(2)}, ${currentData.high.toFixed(2)}]</span>`
+                            `Estimate: ${currentData.val.toFixed(3)}<br><br>` +
+                            `Time: ${safeWindowStart.toFixed(1)}s - ${(safeWindowStart + 4).toFixed(1)}s<br>` +
+                            `Interval: ${currentData.low.toFixed(2)} – ${currentData.high.toFixed(2)}`
                         );
                     }
                 })
+
                 .on("mouseout", function() {
                     d3.select("#tooltip").style("opacity", 0);
-                    maskLeft.style("opacity", 0);
-                    maskRight.style("opacity", 0);
+                    maskLeft.attr("width", 0);
+                    maskRight.attr("width", 0);
                 });
 
                 
@@ -891,14 +875,14 @@
     // DEV MODE: AUTO-LOAD CHART WITH MOCK DATA
     // ==========================================
     
-/*     // 1. Unhide the result area so D3 can measure the width
+    // 1. Unhide the result area so D3 can measure the width
     document.getElementById('result-area').classList.remove('hidden');
     
     // 2. Save it to your global variable (for window resizing to work)
     currentTimelineData = mockData.timeline_of_results;
     
     // 3. Draw it instantly!
-    drawChart(currentTimelineData); */
+    drawChart(currentTimelineData);
     
     </script>
 </body>
