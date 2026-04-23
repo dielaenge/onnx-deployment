@@ -215,13 +215,17 @@ sketch out [vpc.tf](../terraform/vpc.tf)
 
 ===
 
-INFERENCE DEBUGGING
+## EXCURSION
+
+### E.1. INFERENCE DEBUGGING
 see [Inference Debugging Notes / artifacts on branch `debug/`](inference-debugging.md)
 
 ===
 
 - Back at `commit 042b8ed`
 - pulled changes made on IntelMB
+
+### E.2. IMPLEMNTING FIX
 
 - refactoring `audio_utils.py` to use fixed preprocessing on *moving window/time-sliced* input
   - the fix (standardization) must be applied to the *entire* spectrogram, *before* slicing
@@ -233,10 +237,12 @@ see [Inference Debugging Notes / artifacts on branch `debug/`](inference-debuggi
 - built, tagged and pushed refactored / fixed Docker image to ECR
 
 
---- getting back to terraform
+## Back to WIP
 
 - rerun init – [WHY?](https://developer.hashicorp.com/terraform/cli/commands/init)
 - I'm not sure if my `terraform/terraform.lock.hcl` is commited to the github repo which is required to ensure consistent tf runs in different environments 
+
+## 4. Set up ECS
 
 - created `aws_ecs_cluster.bape_cluster`, requires only `name`
 
@@ -273,6 +279,8 @@ Trying to retrace what I did, as the inference debugging was a long break before
 
 ---
 
+## 5. Set up edge CDN
+
 - create `cdn.tf` for phase 5 frontend infra
   - CloudFront distribution using an S3 origin to serv index.html
 
@@ -292,6 +300,48 @@ From the Dev Tools console:
   - increasing `cpu` and `memory` in the task definition solved the bottleneck
 
   --> (check container insights to rightsize resources)
+
+
+## Front end edits:
+  - to visualize input separation (not a fluid process)
+    - d3.curve(stepAfter) instead of flattened curve
+    - mask focused input sequence, when hovering over focused mel band
+    - display end time in addition to just start time
+
+  - docker build `:v3.1.0-phase5-final`
+
+## 6. Set up CI/CD foundation
+
+- created [cicd.tf](../terraform/cicd.tf)
+  - GitHub as OpenIDIdentity Provider
+  - IAM role assumed by GitHub action through included trust policy
+  - IAM permissions policy attached to role (to log in to ECR; set of permissions to push to bape-inference-tf ECR repo; permission to force a new ECS deployment)
+
+BUG:
+- after applying the terraform and testing the new pipeline the app failed with this CW log:
+
+```logs.txt
+026-04-23 08:07:17,523 - API CRITICAL - FATAL: Could not load model at startup. Server will fail on requests. Error: [ONNXRuntimeError] : 3 : NO_SUCHFILE : Load model from /app/app/models/bape_2026-04-13_15-13-22.onnx failed:Load model /app/app/models/bape_2026-04-13_15-13-22.onnx failed. File doesn't exist
+```
+
+REASON:
+- the app wasn't able to pull the onnx model because I included it in my .gitignore as it`s not code but binary and therefor not meant to be stored in GitHub
+
+FIX:
+- the model and model data have to be pulled from a source outside of GitHub
+  - Considered MLflow or another model registry for model versioning, but then became familiar with the required overhead which made it infeasible for it to fit into phase 5
+  - decided to store model in S3
+
+EXECUTION:
+- what is the exact time and location to pull the model?
+  - when the container runtime is created?
+    - no, massive delays with each container start
+  - via Dockerbuild?
+    - no, docker builds require complex build secrets to access AWS
+  - via GitHub Actions?
+    - yes! it alreadey authenticates with AWS and therefor only needs minor edits to handle the model pull
+      - permissions to list bucket and get the included objects
+      - GitHub Action pulls the model data from S3 when a push happens
 
 
 
