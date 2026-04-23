@@ -17,6 +17,12 @@ import torch
 from torch import Tensor
 from librosa.feature import melspectrogram
 
+# --- Logging Setup ---
+logging.basicConfig(
+    level=logging.INFO,
+    format= '%(asctime)s - %(name)s %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("AUDIO_UTILS")
 
 TARGET_SR = 16000 # target sample rate – placeholder value but a common one
 
@@ -86,56 +92,6 @@ def normalize_with_ffmpeg(audio_bytes: bytes, target_sr: int = 16000) -> np.ndar
             os.remove(input_path)
         if os.path.exists(output_path):
             os.remove(output_path)
-
-
-# deactivated the old slicing mechanism; now slicing spectrogram instead of raw audio_array
-# def slice_audio_to_chunks(audio_array: np.ndarray, sr=16000):
-#     window_size = 4 * sr
-#     stride_size = 2 * sr
-# deactivated the old slicing mechanism; now slicing spectrogram instead of raw audio_array
-# def slice_audio_to_chunks(audio_array: np.ndarray, sr=16000):
-#     window_size = 4 * sr
-#     stride_size = 2 * sr
-
-#     slices = []
-#     timestamps = []
-#     slices = []
-#     timestamps = []
-
-#     for i in range(0, len(audio_array), stride_size):
-#         # define slice size
-#         start = i
-#         end = i + window_size
-#         chunk = audio_array[start:end]
-#     for i in range(0, len(audio_array), stride_size):
-#         # define slice size
-#         start = i
-#         end = i + window_size
-#         chunk = audio_array[start:end]
-
-#         # pad end of chunk if slice is smaller than 4 seconds
-#         if len(chunk) < window_size:
-#             padding_needed = window_size - len(chunk)
-#             chunk = np.pad(chunk, (0, padding_needed), mode="constant")
-#         # pad end of chunk if slice is smaller than 4 seconds
-#         if len(chunk) < window_size:
-#             padding_needed = window_size - len(chunk)
-#             chunk = np.pad(chunk, (0, padding_needed), mode="constant")
-
-#         # add chunk to list of slices
-#         slices.append(chunk)
-#         # add chunk to list of slices
-#         slices.append(chunk)
-
-# #         # add timestamps in seconds (i / sample rate)
-# #         timestamps.append(i / sr)
-
-# #         # prevent producing empty windows by breaking when the audio_array is exceeded
-# #         if end >= len(audio_array):
-# #             break
-        
-#   return slices, timestamps
-#   return slices, timestamps
 
 # generating the spectrogram image 
 def generate_spectrogram_image(spectrogram_2d: np.ndarray) -> str:
@@ -260,7 +216,8 @@ def slice_spectrogram(standardized_spectrogram):
         timestamps_sec.append(timestamp_sec)
 
         # break when end exceeds total amount of frames
-        if end > total_frames:
+        if end >= total_frames:
+            logger.info("end: %s, > = total_frames: %s", end, total_frames)
             break
 
     return slices, timestamps_sec

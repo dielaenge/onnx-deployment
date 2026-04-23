@@ -161,19 +161,16 @@
     </div>
     </section>
 
-    <script>
-
-
-      // VARIABLES
-      
-        const micBtn = document.getElementById('mic-btn');
-        const fileInput = document.getElementById('file-input');
-        const statusText = document.getElementById('status-text');
-        const jsonResult = document.getElementById('json-result');
-        const resultArea = document.getElementById('result-area');
+<script>
+// VARIABLES      
+const micBtn = document.getElementById('mic-btn');
+const fileInput = document.getElementById('file-input');
+const statusText = document.getElementById('status-text');
+const jsonResult = document.getElementById('json-result');
+const resultArea = document.getElementById('result-area');
 
 // ============== MOCK DATA =================
- const mockData = {
+ /* const mockData = {
   "timeline_of_results": [
     {
       "timestamp_step": 0,
@@ -427,463 +424,473 @@
         0.5656464099884033
       ],
       "fingerprint": "processed - output tbd"
-    }]} 
+    }]}  */
 // ============== MOCK DATA END =================
 
-        const bandLabels = [
-          { freq: "125 Hz", desc: "Bass/Low-end" },
-          { freq: "250 Hz", desc: "Lower-mid" },
-          { freq: "500 Hz", desc: "Mids" },
-          { freq: "1 kHz",  desc: "Reference Band" },
-          { freq: "2 kHz",  desc: "Upper-mids" },
-          { freq: "4 kHz",  desc: "Presence/Highs" },
-          { freq: "8 kHz",  desc: "Brilliance" }
-            ];
+const bandLabels = [
+  { freq: "125 Hz", desc: "Bass/Low-end" },
+  { freq: "250 Hz", desc: "Lower-mid" },
+  { freq: "500 Hz", desc: "Mids" },
+  { freq: "1 kHz",  desc: "Reference Band" },
+  { freq: "2 kHz",  desc: "Upper-mids" },
+  { freq: "4 kHz",  desc: "Presence/Highs" },
+  { freq: "8 kHz",  desc: "Brilliance" }
+    ];
       
-        let mediaRecorder;
-        let audioChunks = [];
+let mediaRecorder;
+let audioChunks = [];
       
-        let currentTimelineData = null; //store timeline data outside of upload(blob) function
+let currentTimelineData = null; //store timeline data outside of upload(blob) function
 
-        let lockedParamId = null; //locked param_id to trigger 
+let lockedParamId = null; //locked param_id to trigger 
 
-        // --- MICROPHONE LOGIC ---
-        micBtn.onclick = async () => {
-            if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    mediaRecorder = new MediaRecorder(stream);
-                    audioChunks = [];
-                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-                    mediaRecorder.onstop = () => upload(new Blob(audioChunks, { type: 'audio/wav' }));
-                    mediaRecorder.start();
-                    micBtn.classList.add('recording-glow', 'border-red-500');
-                    statusText.innerText = "Recording...";
-                } catch (err) { alert("Mic access denied."); }
-            } else {
-                mediaRecorder.stop();
-                micBtn.classList.remove('recording-glow', 'border-red-500');
-                statusText.innerText = "Processing...";
-            }
-        };
+// --- MICROPHONE LOGIC ---
+micBtn.onclick = async () => {
+    if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            audioChunks = [];
+            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+            mediaRecorder.onstop = () => upload(new Blob(audioChunks, { type: 'audio/wav' }));
+            mediaRecorder.start();
+            micBtn.classList.add('recording-glow', 'border-red-500');
+            statusText.innerText = "Recording...";
+        } 
+        catch (err) { alert("Mic access denied."); }
+    } 
+    else {
+        mediaRecorder.stop();
+        micBtn.classList.remove('recording-glow', 'border-red-500');
+        statusText.innerText = "Processing...";
+    }
+};
 
-        // --- FILE UPLOAD LOGIC ---
-        fileInput.onchange = (e) => {
-            if (e.target.files.length > 0) {
-                statusText.innerText = "Processing...";
-                document.getElementById('spinner').classList.remove('hidden');
-                upload(e.target.files[0]);
-            }
-        };
-        
-        // DATA VIZ
-        function drawChart(timeline) {
-            const container = document.getElementById('chart-container');
-            const width = container.clientWidth;
-            const height = container.clientHeight;
+// --- FILE UPLOAD LOGIC ---
+fileInput.onchange = (e) => {
+    if (e.target.files.length > 0) {
+        statusText.innerText = "Processing...";
+        document.getElementById('spinner').classList.remove('hidden');
+        upload(e.target.files[0]);
+    }
+};
 
-            // returns the time value from the seriesData.time array;left from an input x
-            // https://d3js.org/d3-array/bisect#bisector_left
-            const bisectTime = d3.bisector(d => d.time).left;
+// DATA VIZ
+function drawChart(timeline) {
+    const container = document.getElementById('chart-container');
+    const width = container.clientWidth;
+    const height = container.clientHeight;
 
-            const seriesData = [];
-            const paramCount = 7;
+    // returns the time value from the seriesData.time array;left from an input x
+    // https://d3js.org/d3-array/bisect#bisector_left
+    const bisectTime = d3.bisector(d => d.time).left;
 
-            for (let p = 0; p < paramCount; p++) {
-                const paramsAndIntervals = timeline.map(d => ({
-                    time: d.timestamp_step,
-                    // BAPEs array has 21 items
-                    // param 0 uses indices 0,1,2 – param 1 uses 3,4,5 – …
-                    low:  d.BAPEs[p * 3], // Lower bound of confidence interval for paramter p
-                    val:  d.BAPEs[p * 3 + 1], // Actual estimate of parameter p
-                    high: d.BAPEs[p * 3 + 2] // Upper bound of confidence interval for parameter p
-                }));
-                // extend the last data point to show the tail end of the last result
-                if (paramsAndIntervals.length > 0) {
-                    const lastPoint = paramsAndIntervals[paramsAndIntervals.length - 1];
-                    paramsAndIntervals.push({
-                        time: lastPoint.time + 4, // Add the 4-second window
-                        low: lastPoint.low,
-                        val: lastPoint.val,
-                        high: lastPoint.high
-                    });
-                }
-                // add to seriesData
-                seriesData.push({ id: p, values: paramsAndIntervals }); // Note: I renamed 'paramsAndIntervals' to 'values' for consistency
-            }
+    const seriesData = [];
+    const paramCount = 7;
 
-            // Calculate global Min/Max across all series
-            const allValues = seriesData.flatMap(s => s.values); // Flatten all 7 series into one big list
-
-            console.log("Max Time in Data:", d3.max(allValues, d => d.time));
-            console.log("Last Data Point:", seriesData[0].values[seriesData[0].values.length - 1]);
-
-            // use D3 sequential color scheme, 
-            // https://d3js.org/d3-scale-chromatic/sequential#interpolateWarm
-            const colorScale = d3.scaleSequential(d3.interpolateWarm)
-                .domain([0, 6]); // 0 is 125Hz (Bass), 6 is 8kHz (Treble)
-
-            // 2. Clear previous chart and create svg container
-            d3.select("#chart-container").selectAll("*").remove();
-
-            const svg = d3.select("#chart-container")
-                .append("svg")
-                .attr("width", width)
-                .attr("height", height);
-
-            // 3. Define Scales (Scales translate data values, the INPUT DOMAIN, to screen values, the OUTPUT RANGE)
-
-            // x-axis scale: time
-            const xScale = d3.scaleLinear()
-                .domain([0, d3.max(allValues, d => d.time)]) // INPUT from 0 to max value from d.time, upper end +4 seconds to display tail end of last input
-                .range([50, width - 20]); // OUTPUT starting at 50px and ending 20px before max width            
-            
-            // y-axis scale: estimates
-            const yScale = d3.scaleLinear()
-                .domain([
-                    d3.min(allValues, d => d.low) * 0.9, // INPUT MIN is lowest lower bound value (d.low); scale by 0.9 to add space beneath
-                    d3.max(allValues, d => d.high) * 1.1 // INPUT MX is highest upper bound value (d.high); scale by 1.1 to add space above
-                ])
-                .range([height - 30, 20]); // OUTPUT starting at (max height - 30px), ending at 20px height
-            
-            // create an area chart with .low and .high; on top, create a line chart with the actual .val
-            
-            // create area generator
-            const areaGenerator = d3.area()
-            .x(d => xScale(d.time)) //get x-value from time step
-            .y0(d => yScale(d.low)) //get lower bound confidence
-            .y1(d => yScale(d.high)) //get upper bound confidence
-            //optional line-smoothing
-            .curve(d3.curveStepAfter); 
-
-            //   create line generator
-            const lineGenerator = d3.line()
-            .x(d => xScale(d.time)) // take timestampe_step values and scale to x-axis
-            .y(d => yScale(d.val)) // take BAPEs value at index[1]
-            //optional line-smoothing
-            .curve(d3.curveStepAfter); // was curveMonotoneX 
-
-
-            // Layer the visualization
-
-            // We visualize each of the 7 octave bands with a line graph for the timeline of actual estimates and an area chart for the timeline of the related confidence intervall
-            // we use d.id as the selector for each group
-            
-            // 1. create groups
-            const groups = svg.selectAll(".parameter-group")
-                .data(seriesData)
-                .enter()
-                .append("g")
-                .attr("class", d => `parameter-group param-${d.id}`) // class to toggle 
-
-            // 2. append area graph to each group
-            groups.append("path")
-                .attr("class", "confidence-area")
-                .attr("d", d => areaGenerator(d.values)) // generator sources values.low and .high to generate area
-                .attr("fill", d => colorScale(d.id))
-                .attr("opacity", 0.2);
-
-            // 3. append line graph to each group
-            groups.append("path")
-                .attr("class", "estimate-line")
-                .attr("d", d => lineGenerator(d.values)) // generator sources values.low and .high to generate area
-                .attr("stroke", d => colorScale(d.id))
-                .attr("stroke-width", 2)
-                .attr("fill", "none");
-                
-            // 4. The Invisible Overlay (Catches all mouse movements perfectly)
-
-            // Dark mask for the left side
-            const maskLeft = svg.append("rect")
-                .attr("y", 20)
-                .attr("height", height - 50)
-                .attr("x", 50)           // Start at left margin
-                .attr("width", 0)        // add width when calculated on mousemove
-                .attr("fill", "rgba(113,255, 195, 0.3)")
-                .style("pointer-events", "none");
-
-            // Dark mask for the right side
-            const maskRight = svg.append("rect")
-                .attr("y", 20)
-                .attr("height", height - 50)
-                .attr("x", width - 20)
-                .attr("width", 0)
-                .attr("fill", "rgba(113,255, 195, 0.3)")
-                .style("pointer-events", "none");
-
-            svg.append("rect")
-                .attr("width", width)
-                .attr("height", height)
-                .attr("fill", "transparent")
-                .on("mousemove", function(event) {
-                    if (lockedParamId !== null) {
-                        const [mouseX, _] = d3.pointer(event);
-                        const hoverTime = xScale.invert(mouseX) - 2;
-
-                        // 1. RE-FETCH the active series inside this scope
-                        const activeSeries = seriesData.find(s => s.id === lockedParamId);
-                        if (!activeSeries) return;
-
-                        // 2. RE-CALCULATE maxTime inside this scope
-                        const maxTime = d3.max(activeSeries.values, d => d.time);
-                        
-                        // 3. Calculate the nearest window
-                        const nearestWindowStart = Math.max(0, Math.round(hoverTime / 2) * 2 );
-                        const safeWindowStart = Math.min(nearestWindowStart, maxTime);
-
-                        // 4. Position and Tooltip logic
-                        const windowStartX = xScale(safeWindowStart);
-                        const windowEndX = xScale(Math.min(maxTime + 4, safeWindowStart + 4));
-
-                        const pointX = xScale(safeWindowStart + 2);
-                        const currentData = activeSeries.values.find(v => v.time === safeWindowStart) || activeSeries.values[0];
-                        
-                        d3.select("#tooltip")
-                            .style("left", pointX + "px")
-                            .style("top", (yScale(currentData.val) - 35) + "px")
-                            .style("opacity", 1);
-
-                        // Curtains
-                        console.log("Mouse X:", mouseX, "HoverTime:", hoverTime, "SnappedStart:", safeWindowStart);
-                        maskLeft.attr("x", 50).attr("width", Math.max(0, windowStartX - 50));
-                        maskRight.attr("x", windowEndX).attr("width", Math.max(0, (width - 20) - windowEndX));
-
-                        d3.select("#tt-header").text(`${bandLabels[lockedParamId].freq} (${bandLabels[lockedParamId].desc})`);
-                        d3.select("#tt-value").html(
-                            `Estimate: ${currentData.val.toFixed(3)}<br><br>` +
-                            `Time: ${safeWindowStart.toFixed(1)}s - ${(safeWindowStart + 4).toFixed(1)}s<br>` +
-                            `Interval: ${currentData.low.toFixed(2)} – ${currentData.high.toFixed(2)}`
-                        );
-                    }
-                })
-
-                .on("mouseout", function() {
-                    d3.select("#tooltip").style("opacity", 0);
-                    maskLeft.attr("width", 0);
-                    maskRight.attr("width", 0);
-                });
-
-                
-
-            // append grid/axes (background)
-            // x-axis at bottom
-            svg.append("g")
-                .attr("transform", `translate(0, ${height - 30})`) // place at bottom
-                .call(d3.axisBottom(xScale)) // Constructs a new bottom-oriented axis generator for the given scale, with empty tick arguments, a tick size of 6 and padding of 3
-            
-            // add x-axis label
-            svg.append("text")
-                .attr("text-anchor", "middle")
-                .attr("x", width /2 )
-                .attr("y", height) // Position it just below the axis
-                .attr("class", "text-[10px] fill-slate-500 uppercase tracking-widest font-bold")
-                .text("Time (Seconds)");
-
-
-            // y-axis to the left
-            svg.append("g")
-                .attr("transform", `translate(50 ,0)`) // move right to keep margin
-                .call(d3.axisLeft(yScale)) // Constructs a new bottom-oriented axis generator for the given scale, with empty tick arguments, a tick size of 6 and padding of 3
-
-            // add y-axis label
-            svg.append("text")
-              .attr("transform", "rotate(-90)") 
-              .attr("text-anchor", "middle")    
-              .attr("x", -(height / 2))         
-              .attr("y", 15)                    
-              .attr("class", "text-[10px] fill-slate-500 uppercase tracking-widest font-bold")
-              .text("Estimate and Confidence");
-
-            // data visualisation
-
-            // Clear the legend before redrawing to prevent duplicates on resize
-            document.getElementById("chart-legend").innerHTML = "";
-
-            // Loop through the data series
-            seriesData.forEach(s => {
-                // 1. Create the main Button Container
-                const btn = document.createElement("button");
-                btn.id = `btn-param-${s.id}`;
-                btn.className = "flex items-center space-x-3 text-xs p-2 rounded hover:bg-white/5 w-full text-left transition-all border border-transparent hover:border-slate-700 group";
-    
-                // 2. Create the Color Dot
-                const dot = document.createElement("div");
-                dot.className = "w-3 h-3 rounded-full flex-shrink-0 shadow-lg shadow-black/50";
-                dot.style.backgroundColor = colorScale(s.id);
-                
-                // 3. Create a Wrapper DIV for the text (Flex Column)
-                const textCol = document.createElement("div");
-                textCol.className = "flex flex-col";
-
-                // 4. Create the Frequency Span (Bold)
-                const freqLabel = document.createElement("span");
-                freqLabel.className = "font-bold text-slate-200 group-hover:text-white";
-                // parse bandLabels.frequ
-                freqLabel.innerText = bandLabels[s.id].freq; 
-
-                // E. Create the Description Span (Small/Gray)
-                const ctxLabel = document.createElement("span");
-                ctxLabel.className = "text-[10px] text-slate-500 uppercase tracking-wider group-hover:text-slate-400";
-                // parse bandLabels.desc
-                ctxLabel.innerText = bandLabels[s.id].desc;
-
-                // F. Attach text spans to the Wrapper Div
-                textCol.appendChild(freqLabel);
-                textCol.appendChild(ctxLabel);
-    
-                // G. Add Toggle Functionality
-                // Helper function to isolate visually
-                const isolateVisuals = (targetId) => {
-                    // Fade SVG graphs
-                    d3.selectAll(".parameter-group").transition().duration(200).style("opacity", 0.05);
-                    d3.select(`.param-${targetId}`).transition().duration(200).style("opacity", 1);
-                    
-                    // Dim HTML buttons
-                    for (let i = 0; i < 7; i++) {
-                        const b = document.getElementById(`btn-param-${i}`);
-                        if (b) {
-                            if (i === targetId) {
-                                b.classList.remove("opacity-40", "grayscale");
-                                b.classList.add("border-slate-500"); // Add highlight border
-                            } else {
-                                b.classList.add("opacity-40", "grayscale");
-                                b.classList.remove("border-slate-500");
-                            }
-                        }
-                    }
-                };
-
-                // Helper function to reset visuals
-                const resetVisuals = () => {
-                    d3.selectAll(".parameter-group").transition().duration(200).style("opacity", 1);
-                    for (let i = 0; i < 7; i++) {
-                        const b = document.getElementById(`btn-param-${i}`);
-                        if (b) {
-                            b.classList.remove("opacity-40", "grayscale", "border-slate-500");
-                        }
-                    }
-                };
-
-                // HOVER: Temporarily isolate if nothing is locked
-                btn.onmouseenter = () => {
-                    if (lockedParamId === null) isolateVisuals(s.id);
-                };
-
-                // LEAVE: Reset if nothing is locked, or return to locked state
-                btn.onmouseleave = () => {
-                    if (lockedParamId === null) {
-                        resetVisuals();
-                    } else {
-                        isolateVisuals(lockedParamId);
-                    }
-                };
-
-                // CLICK: Toggle lock state
-                btn.onclick = () => {
-                    if (lockedParamId === s.id) {
-                        // Unlock
-                        lockedParamId = null;
-                        resetVisuals();
-                        lockedParamId = null; // Update for the D3 invisible overlay tooltip
-                    } else {
-                        // Lock
-                        lockedParamId = s.id;
-                        isolateVisuals(s.id);
-                        lockedParamId = s.id; // Update for the D3 invisible overlay tooltip
-                    }
-                };
-
-                // H. Final Assembly: Attach Dot and TextWrapper to Button
-                btn.appendChild(dot);
-                btn.appendChild(textCol);
-
-                // I. Mount to the Page
-                document.getElementById("chart-legend").append(btn);
+    for (let p = 0; p < paramCount; p++) {
+        const paramsAndIntervals = timeline.map(d => ({
+            time: d.timestamp_step,
+            // BAPEs array has 21 items
+            // param 0 uses indices 0,1,2 – param 1 uses 3,4,5 – …
+            low:  d.BAPEs[p * 3], // Lower bound of confidence interval for paramter p
+            val:  d.BAPEs[p * 3 + 1], // Actual estimate of parameter p
+            high: d.BAPEs[p * 3 + 2] // Upper bound of confidence interval for parameter p
+        }));
+        // extend the last data point to show the tail end of the last result
+        if (paramsAndIntervals.length > 0) {
+            const lastPoint = paramsAndIntervals[paramsAndIntervals.length - 1];
+            paramsAndIntervals.push({
+                time: lastPoint.time + 4, // Add the 4-second window
+                low: lastPoint.low,
+                val: lastPoint.val,
+                high: lastPoint.high
             });
+        }
+    // add to seriesData
+    seriesData.push({ id: p, values: paramsAndIntervals }); // Note: I renamed 'paramsAndIntervals' to 'values' for consistency
+    }
+
+    // Calculate global Min/Max across all series
+    const allValues = seriesData.flatMap(s => s.values); // Flatten all 7 series into one big list
+
+    // use D3 sequential color scheme, 
+    // https://d3js.org/d3-scale-chromatic/sequential#interpolateWarm
+    const colorScale = d3.scaleSequential(d3.interpolateWarm)
+        .domain([0, 6]); // 0 is 125Hz (Bass), 6 is 8kHz (Treble)
+
+    // 2. Clear previous chart and create svg container
+    d3.select("#chart-container").selectAll("*").remove();
+
+    const svg = d3.select("#chart-container")
+        .append("svg")
+        .attr("width", width)
+        .attr("height", height);
+
+    // 3. Define Scales (Scales translate data values, the INPUT DOMAIN, to screen values, the OUTPUT RANGE)
+
+    // x-axis scale: time
+    const xScale = d3.scaleLinear()
+        .domain([0, d3.max(allValues, d => d.time)]) // INPUT from 0 to max value from d.time, upper end +4 seconds to display tail end of last input
+        .range([50, width - 20]); // OUTPUT starting at 50px and ending 20px before max width    
+    
+    // y-axis scale: estimates
+    const yScale = d3.scaleLinear()
+        .domain([
+            d3.min(allValues, d => d.low) * 0.9, // INPUT MIN is lowest lower bound value (d.low); scale by 0.9 to add space beneath
+            d3.max(allValues, d => d.high) * 1.1 // INPUT MX is highest upper bound value (d.high); scale by 1.1 to add space above
+        ])
+        .range([height - 30, 20]); // OUTPUT starting at (max height - 30px), ending at 20px height
+    
+    // create an area chart with .low and .high; on top, create a line chart with the actual .val
+    
+    // create area generator
+    const areaGenerator = d3.area()
+        .x(d => xScale(d.time)) //get x-value from time step
+        .y0(d => yScale(d.low)) //get lower bound confidence
+        .y1(d => yScale(d.high)) //get upper bound confidence
+        //optional line-smoothing
+        .curve(d3.curveStepAfter); 
+
+    //   create line generator
+    const lineGenerator = d3.line()
+        .x(d => xScale(d.time)) // take timestampe_step values and scale to x-axis
+        .y(d => yScale(d.val)) // take BAPEs value at index[1]
+        //optional line-smoothing
+        .curve(d3.curveStepAfter); // was curveMonotoneX 
+
+
+    // Layer the visualization
+
+    // We visualize each of the 7 octave bands with a line graph for the timeline of actual estimates and an area chart for the timeline of the related confidence intervall
+    // we use d.id as the selector for each group
+    
+    // Create groups
+    const groups = svg.selectAll(".parameter-group")
+        .data(seriesData)
+        .enter()
+        .append("g")
+        .attr("class", d => `parameter-group param-${d.id}`) // class to toggle 
+
+    // Append area graph to each group
+    groups.append("path")
+        .attr("class", "confidence-area")
+        .attr("d", d => areaGenerator(d.values)) // generator sources values.low and .high to generate area
+        .attr("fill", d => colorScale(d.id))
+        .attr("opacity", 0.2);
+
+    // Append line graph to each group
+    groups.append("path")
+        .attr("class", "estimate-line")
+        .attr("d", d => lineGenerator(d.values)) // generator sources values.low and .high to generate area
+        .attr("stroke", d => colorScale(d.id))
+        .attr("stroke-width", 2)
+        .attr("fill", "none");
+
+    // Invisible Overlay (Catches all mouse movements)
+
+    // Dark mask for the left side
+    const maskLeft = svg.append("rect")
+        .attr("y", 20)
+        .attr("height", height - 50)
+        .attr("x", 50)   // Start at left margin
+        .attr("width", 0)// add width when calculated on mousemove
+        .attr("fill", "rgba(113,255, 195, 0.3)")
+        .style("pointer-events", "none");
+
+    // Dark mask for the right side
+    const maskRight = svg.append("rect")
+        .attr("y", 20)
+        .attr("height", height - 50)
+        .attr("x", width - 20)
+        .attr("width", 0)
+        .attr("fill", "rgba(113,255, 195, 0.3)")
+        .style("pointer-events", "none");
+
+    svg.append("rect")
+        .attr("width", width)
+        .attr("height", height)
+        .attr("fill", "transparent")
+        .on("mousemove", function(event) {
+            if (lockedParamId !== null) {
+                const [mouseX, _] = d3.pointer(event);
+                const hoverTime = xScale.invert(mouseX) - 2;
+
+                // 1. RE-FETCH the active series inside this scope
+                const activeSeries = seriesData.find(s => s.id === lockedParamId);
+                    if (!activeSeries) return;
+
+                // 2. RE-CALCULATE maxTime inside this scope
+                const maxTime = d3.max(activeSeries.values, d => d.time);
+
+                // 3. Calculate the nearest window
+                const nearestWindowStart = Math.max(0, Math.round(hoverTime / 2) * 2 );
+                const safeWindowStart = Math.min(nearestWindowStart, maxTime);
+
+                // 4. Position and Tooltip logic
+                const windowStartX = xScale(safeWindowStart);
+                const windowEndX = xScale(Math.min(maxTime + 4, safeWindowStart + 4));
+
+                const pointX = xScale(safeWindowStart + 2);
+                const currentData = activeSeries.values.find(v => v.time === safeWindowStart) || activeSeries.values[0];
+
+                d3.select("#tooltip")
+                    .style("left", pointX + "px")
+                    .style("top", (yScale(currentData.val) - 35) + "px")
+                    .style("opacity", 1);
+
+                // Curtains
+                // console.log("DEBUG INFO: Mouse X:", mouseX, "HoverTime:", hoverTime, "SnappedStart:", safeWindowStart);
+                maskLeft
+                    .attr("x", 50)
+                    .attr("width", Math.max(0, windowStartX - 50));
+                maskRight
+                    .attr("x", windowEndX)
+                    .attr("width", Math.max(0, (width - 20) - windowEndX));
+
+                d3.select("#tt-header")
+                    .text(`${bandLabels[lockedParamId].freq} (${bandLabels[lockedParamId].desc})`);
+
+                d3.select("#tt-value")
+                    .html(
+                    `Estimate: ${currentData.val.toFixed(3)}<br><br>` +
+                    `Time: ${safeWindowStart.toFixed(1)}s - ${(safeWindowStart + 4).toFixed(1)}s<br>` +
+                    `Interval: ${currentData.low.toFixed(2)} – ${currentData.high.toFixed(2)}`
+                    );
+            }
+        })
+        .on("mouseout", function() {
+            d3.select("#tooltip").style("opacity", 0);
+            maskLeft.attr("width", 0);
+            maskRight.attr("width", 0);
+            });
+    
+    // append grid/axes (background)
+    // x-axis at bottom
+    svg.append("g")
+        .attr("transform", `translate(0, ${height - 30})`) // place at bottom
+        .call(d3.axisBottom(xScale)) // Constructs a new bottom-oriented axis generator for the given scale, with empty tick arguments, a tick size of 6 and padding of 3
+
+    // add x-axis label
+    svg.append("text")
+        .attr("text-anchor", "middle")
+        .attr("x", width /2 )
+        .attr("y", height) // Position it just below the axis
+        .attr("class", "text-[10px] fill-slate-500 uppercase tracking-widest font-bold")
+        .text("Time (Seconds)");
+
+
+    // y-axis to the left
+    svg.append("g")
+        .attr("transform", `translate(50 ,0)`) // move right to keep margin
+        .call(d3.axisLeft(yScale)) // Constructs a new bottom-oriented axis generator for the given scale, with empty tick arguments, a tick size of 6 and padding of 3
+
+    // add y-axis label
+    svg.append("text")
+    .attr("transform", "rotate(-90)") 
+    .attr("text-anchor", "middle")    
+    .attr("x", -(height / 2)) 
+    .attr("y", 15)    
+    .attr("class", "text-[10px] fill-slate-500 uppercase tracking-widest font-bold")
+    .text("Estimate and Confidence");
+
+// DATA VIZ
+
+    // Clear the legend before redrawing to prevent duplicates on resize
+    document.getElementById("chart-legend").innerHTML = "";
+
+    // Loop through the data series
+    seriesData.forEach(s => {
+        // Create the main Button Container
+        const btn = document.createElement("button");
+        btn.id = `btn-param-${s.id}`;
+        btn.className = "flex items-center space-x-3 text-xs p-2 rounded hover:bg-white/5 w-full text-left transition-all border border-transparent hover:border-slate-700 group";
+            
+        // Create the Color Dot
+        const dot = document.createElement("div");
+        dot.className = "w-3 h-3 rounded-full flex-shrink-0 shadow-lg shadow-black/50";
+        dot.style.backgroundColor = colorScale(s.id);
+
+        // Create a Wrapper DIV for the text (Flex Column)
+        const textCol = document.createElement("div");
+        textCol.className = "flex flex-col";
+
+        // Create the Frequency Span (Bold)
+        const freqLabel = document.createElement("span");
+        freqLabel.className = "font-bold text-slate-200 group-hover:text-white";
+        // parse bandLabels.frequ
+        freqLabel.innerText = bandLabels[s.id].freq; 
+
+        // Create the Description Span (Small/Gray)
+        const ctxLabel = document.createElement("span");
+        ctxLabel.className = "text-[10px] text-slate-500 uppercase tracking-wider group-hover:text-slate-400";
+        // parse bandLabels.desc
+        ctxLabel.innerText = bandLabels[s.id].desc;
+
+        // Attach text spans to the Wrapper Div
+        textCol.appendChild(freqLabel);
+        textCol.appendChild(ctxLabel);
+
+        // Add Toggle Functionality
+        // Helper function to isolate visually
+        const isolateVisuals = (targetId) => {
+            // Fade SVG graphs
+            d3.selectAll(".parameter-group").transition().duration(200).style("opacity", 0.05);
+            d3.select(`.param-${targetId}`).transition().duration(200).style("opacity", 1);
+
+        // Dim HTML buttons
+            for (let i = 0; i < 7; i++) {
+                const b = document.getElementById(`btn-param-${i}`);
+                if (b) {
+                    if (i === targetId) {
+                        b.classList.remove("opacity-40", "grayscale");
+                        b.classList.add("border-slate-500"); // Add highlight border
+                    } 
+                    else {
+                        b.classList.add("opacity-40", "grayscale");
+                        b.classList.remove("border-slate-500");
+                    }
+                }
+            }
         };
 
-        // --- MAIN LOGIC ---
-        async function upload(blob) {
-            const formData = new FormData();
-
-            // LOGIC: Check if it's a file with a name, otherwise default to 'mic_recording'
-            let filename = 'mic_recording.wav'; 
-            if (blob.name) {
-                filename = blob.name;
-            }
-            // append with file name
-            formData.append('audio_file', blob, filename);
-
-            // Simulating a progress timer if it's a cold start
-            let progressSeconds = 0;
-            const progressInterval = setInterval(() => {
-                progressSeconds++;
-                if (progressSeconds === 10) statusText.innerText = "Running inference…"                
-                }, 1000);
-
-            try {
-                const response = await fetch('/acou-vec/generate', { method: 'POST', body: formData });
+        // Helper function to reset visuals
+        const resetVisuals = () => {
+            d3.selectAll(".parameter-group")
+            .transition()
+            .duration(200)
+            .style("opacity", 1);
             
-
-                const data = await response.json();
-
-                // store data outside of function to make it available for window resize, but also for drawChart
-                currentTimelineData = data.timeline_of_results;
-
-                const presigned_urls = data.preprocessed_inputs;
-
-                // 1. Set the Audio Player source
-                if (presigned_urls.wav_url) {
-                    document.getElementById('audio-player').src=presigned_urls.wav_url;
+            for (let i = 0; i < 7; i++) {
+                const b = document.getElementById(`btn-param-${i}`);
+                if (b) {
+                    b.classList.remove("opacity-40", "grayscale", "border-slate-500");
                 }
-                // 2. Set the Spectrogram Image source
-                if (presigned_urls.png_url) {
-                    document.getElementById('spectrogram-display').src=presigned_urls.png_url;
-                }
-                
-                // Clear the timer once the real data arrives
-                clearInterval(progressInterval);
-                document.getElementById('spinner').classList.add('hidden');
-
-                resultArea.classList.remove('hidden');
-                drawChart(currentTimelineData);
-                jsonResult.textContent = JSON.stringify(data, null, 2);
-                statusText.innerText = "Analysis Complete";
-            } catch (err) {
-                statusText.innerText = "Failed";
-                console.error(err);
             }
+        };
+
+        // HOVER: Temporarily isolate if nothing is locked
+        btn.onmouseenter = () => {
+            if (lockedParamId === null) isolateVisuals(s.id);
+        };
+
+        // LEAVE: Reset if nothing is locked, or return to locked state
+        btn.onmouseleave = () => {
+            if (lockedParamId === null) {
+                resetVisuals();
+            } 
+            else {
+                isolateVisuals(lockedParamId);
+            }
+        };
+
+        // CLICK: Toggle lock state
+        btn.onclick = () => {
+            if (lockedParamId === s.id) {
+                // Unlock
+                lockedParamId = null;
+                resetVisuals();
+                lockedParamId = null; // Update for the D3 invisible overlay tooltip
+            } 
+            else {
+                // Lock
+                lockedParamId = s.id;
+                isolateVisuals(s.id);
+                lockedParamId = s.id; // Update for the D3 invisible overlay tooltip
+            }
+        };
+
+        // Final Assembly: Attach Dot and TextWrapper to Button
+        btn.appendChild(dot);
+        btn.appendChild(textCol);
+
+        // Mount to the Page
+        document.getElementById("chart-legend").append(btn);
+    });
+};
+
+// --- MAIN LOGIC ---
+async function upload(blob) {
+    const formData = new FormData();
+
+    // LOGIC: Check if it's a file with a name, otherwise default to 'mic_recording'
+    let filename = 'mic_recording.wav'; 
+    if (blob.name) {
+        filename = blob.name;
+            }
+    // append with file name
+    formData.append('audio_file', blob, filename);
+
+    // Simulating a progress timer if it's a cold start
+    let progressSeconds = 0;
+    const progressInterval = setInterval(() => {
+        progressSeconds++;
+        if (progressSeconds === 10) statusText.innerText = "Running inference…"
+        }, 1000);
+
+        try {
+            const response = await fetch('/acou-vec/generate', { method: 'POST', body: formData });
+        
+
+            const data = await response.json();
+
+            // store data outside of function to make it available for window resize, but also for drawChart
+            currentTimelineData = data.timeline_of_results;
+
+            const presigned_urls = data.preprocessed_inputs;
+
+            // 1. Set the Audio Player source
+            if (presigned_urls.wav_url) {
+                document.getElementById('audio-player').src=presigned_urls.wav_url;
+            }
+            // 2. Set the Spectrogram Image source
+            if (presigned_urls.png_url) {
+                document.getElementById('spectrogram-display').src=presigned_urls.png_url;
+            }
+
+            // Clear the timer once the real data arrives
+            clearInterval(progressInterval);
+            document.getElementById('spinner').classList.add('hidden');
+
+            resultArea.classList.remove('hidden');
+            drawChart(currentTimelineData);
+            jsonResult.textContent = JSON.stringify(data, null, 2);
+            statusText.innerText = "Analysis Complete";
+        } 
+        catch (err) {
+            statusText.innerText = "Failed";
+            console.error(err);
         }
+}
 
-        // re-render D3 graphs on window resize
+// re-render D3 graphs on window resize
 
-        let resizeTimer;
+let resizeTimer;
 
-        window.addEventListener("resize", () => {
-            // 1. Clear any timer
-            clearTimeout(resizeTimer);
-            // 2. Set a new timer to run 200ms AFTER the last resize event
-            resizeTimer = setTimeout(() => {
-                if (currentTimelineData) {
-                    // Recalculate dimensions and redraw
-                    drawChart(currentTimelineData);
-                }
-            }, 200);
-        });
-    
-    // ==========================================
-    // DEV MODE: AUTO-LOAD CHART WITH MOCK DATA
-    // ==========================================
-    
-    // 1. Unhide the result area so D3 can measure the width
-    document.getElementById('result-area').classList.remove('hidden');
-    
-    // 2. Save it to your global variable (for window resizing to work)
-    currentTimelineData = mockData.timeline_of_results;
-    
-    // 3. Draw it instantly!
-    drawChart(currentTimelineData);
-    
-    </script>
+window.addEventListener("resize", () => {
+    // 1. Clear any timer
+    clearTimeout(resizeTimer);
+    // 2. Set a new timer to run 200ms AFTER the last resize event
+    resizeTimer = setTimeout(() => {
+    if (currentTimelineData) {
+        // Recalculate dimensions and redraw
+        drawChart(currentTimelineData);
+    }
+    }, 200);
+});
+
+// ==========================================
+// DEV MODE: AUTO-LOAD CHART WITH MOCK DATA
+// ==========================================
+
+// 1. Unhide the result area so D3 can measure the width
+/*     document.getElementById('result-area').classList.remove('hidden');
+
+// 2. Save it to your global variable (for window resizing to work)
+currentTimelineData = mockData.timeline_of_results;
+
+// 3. Draw it instantly!
+drawChart(currentTimelineData); */
+</script>
 </body>
 </html>
