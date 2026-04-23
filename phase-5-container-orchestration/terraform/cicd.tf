@@ -42,6 +42,18 @@ resource "aws_iam_role_policy" "github_actions_permissions" {
     Version = "2012-10-17"
     Statement = [
       {
+        # Permission to download the ONNX and ONNX.DATA during CI/CD build
+        Effect = "Allow"
+        Action =[
+          "s3:GetObject",
+          "s3:ListBucket"
+        ]
+        Resource =[
+          aws_s3_bucket.bape_app_data_phase5.arn,       # Allows listing the bucket
+          "${aws_s3_bucket.bape_app_data_phase5.arn}/*" # Allows downloading the files inside
+        ]
+      },
+      {
         # Permission to login to ECR
         Effect   = "Allow"
         Action   = "ecr:GetAuthorizationToken"
