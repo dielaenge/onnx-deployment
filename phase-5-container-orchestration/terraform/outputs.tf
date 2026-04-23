@@ -9,7 +9,8 @@ output "cloudfront_phase5_url" {
   value       = aws_cloudfront_distribution.bape_phase5_frontend_s3_distribution.domain_name
 }
 
-output "bape_alb_dns_name" {
-  description = "DNS name of phase 5 ALB."
-  value       = aws_lb.bape_alb.dns_name
+# Output the Role ARN so we can copy it into our GitHub Actions YAML later
+output "github_actions_role_arn" {
+  description = "GitHub Actions IAM Role ARN. Copy into GitHub Actions YAML:"
+  value       = aws_iam_role.github_actions_role.arn
 }
