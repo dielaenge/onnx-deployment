@@ -440,7 +440,7 @@ resource "aws_ecs_task_definition" "task_definition_bape" {
   container_definitions = jsonencode([
     {
       name      = "bape-container"
-      image     = "${aws_ecr_repository.bape-inference-tf.repository_url}:v3.0.0-cloudfront-edge"
+      image     = "${aws_ecr_repository.bape-inference-tf.repository_url}:latest"
       essential = true
       portMappings = [
         {
