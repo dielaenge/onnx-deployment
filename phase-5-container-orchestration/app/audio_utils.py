@@ -192,6 +192,12 @@ def slice_spectrogram(standardized_spectrogram):
 
     # loop step by step through entire input range, start at 0, end at end of input, move in stride_frames / 2 second steps
     for step in range(0, total_frames, stride_frames):
+        
+        # avoid heavily zero-padded ghost window in case tail end is <=100 frames
+        remaining_frames = total_frames - step
+        if step > 0 and remaining_frames <= (stride_frames + 100):
+            break
+        
         # set start and end for step
         start = step
         end = step + window_frames
