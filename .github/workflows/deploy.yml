@@ -37,6 +37,11 @@ jobs:
         role-to-assume: arn:aws:iam::609662023678:role/github_actions_bape_cd
         aws-region: ${{ env.AWS_REGION }}
 
+    - name: Download ML Model from S3
+      run: |
+        echo "Downloading ONNX model artifacts from S3..."
+        aws s3 cp s3://bape-app-data-phase5-davidg/models/ app/models/ --recursive
+
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
