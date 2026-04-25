@@ -343,6 +343,17 @@ EXECUTION:
       - permissions to list bucket and get the included objects
       - GitHub Action pulls the model data from S3 when a push happens
 
+… SUCCESS
+
+## Phase 5 Finish
+
+Accomplished:
+- Terraform infrastructure productive
+- CI/CD pipeline operates on git push
+- Inference bug fix implemented
+
+To Do: 
+- right sizing resources
 
 
 ```mermaid
