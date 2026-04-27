@@ -1,0 +1,40 @@
+# @package _global_
+
+defaults:
+  - _self_
+  - data: speech
+  - model: speech_encoder
+  - trainer: speech_encoder
+
+# sets logging directory to debug
+debug: false
+
+# rir encoder configuration, should match model/vae.yaml
+rir_encoder:
+  _target_: src.model.vae.VAE
+  in_channels: 1
+  channels: 8
+  multipliers: [1, 2, 4, 8, 16]
+  kernel_sizes: [[1, 9], [1, 9], [1, 9], [3, 9], [3, 9]]
+  strides: [[1, 1], [1, 1], [1, 1], [1, 1], [1, 1]]
+  factors: [[1, 2], [1, 2], [1, 2], [2, 4], [2, 4]]
+  pads: [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+  num_blocks: [1, 1, 1, 1, 1]
+  kl_weight: 0.01
+  latent_proj: 16
+  quantizer: null
+
+  state: logs/vae/2025-11-02_17-44-22/model.pth
+
+# hydra configuration
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: "."
+  output_subdir: null
+  job_logging:
+    root: null
+  sweep:
+    dir: "."
+    subdir: "." 

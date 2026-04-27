@@ -1,0 +1,12 @@
+#---------------------------
+# BAPE-INFERENCE-TF ECR REPO
+#---------------------------
+resource "aws_ecr_repository" "bape-inference-tf" {
+  name                 = "bape-inference-tf"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+}

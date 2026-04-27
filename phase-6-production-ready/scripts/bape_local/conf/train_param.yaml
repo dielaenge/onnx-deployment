@@ -1,0 +1,27 @@
+# @package _global_
+
+defaults:
+  - _self_
+  - data: param
+  - model: param
+  - trainer: param
+
+# sets logging directory to debug
+debug: false
+
+target: t60
+
+subdir: null
+
+# hydra configuration
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: "."
+  output_subdir: null
+  job_logging:
+    root: null
+  sweep:
+    dir: "."
+    subdir: "." 

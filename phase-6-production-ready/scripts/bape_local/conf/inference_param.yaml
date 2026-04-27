@@ -1,0 +1,27 @@
+# @package _global_
+
+defaults:
+  - _self_
+  - data: wavdir
+  - model: param
+  - trainer: speech_encoder
+
+state: logs/debug/param/2025-10-30_18-15-46/model.pth
+
+# sets logging directory to debug
+debug: false
+
+target: t60
+
+# hydra configuration
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: "."
+  output_subdir: null
+  job_logging:
+    root: null
+  sweep:
+    dir: "."
+    subdir: "." 
