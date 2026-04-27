@@ -164,7 +164,7 @@ async def call_bape_api(audio_file: UploadFile = File(...)):
         "request_metadata": {        
             "filename": audio_file.filename,
             "input_duration": f"{round(input_duration,2)} seconds",
-            "processing_time_ms": round(processing_time_ms, 3)
+            "processing_time_ms": f"{round(processing_time_ms, 0)} milliseconds"
         },
 
         "preprocessed_inputs": {
