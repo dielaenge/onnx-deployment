@@ -9,8 +9,8 @@ resource "aws_ecs_task_definition" "task_definition_bape" {
   task_role_arn            = aws_iam_role.ecs_task_role.arn
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = 1024
-  memory                   = 2048
+  cpu                      = 512
+  memory                   = 1024
   container_definitions = jsonencode([
     {
       name      = "bape-container"
@@ -33,7 +33,7 @@ resource "aws_ecs_task_definition" "task_definition_bape" {
         },
         {
           name  = "APP_BUCKET_NAME"
-          value = aws_s3_bucket.bape_app_data_phase5.id
+          value = aws_s3_bucket.bape_app_data_phase6.id
         }
       ]
       logConfiguration = {
@@ -51,6 +51,10 @@ resource "aws_ecs_task_definition" "task_definition_bape" {
 # ECS Cluster
 resource "aws_ecs_cluster" "bape_cluster" {
   name = "bape_cluster"
+  setting {
+    name  = "containerInsights"
+    value = "enhanced"
+    }
 }
 
 # ECS Service

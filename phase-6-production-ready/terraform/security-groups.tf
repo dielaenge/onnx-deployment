@@ -9,7 +9,7 @@ resource "aws_security_group" "vpc_endpoint_sg" {
 
   tags = {
     Name  = "vpc_endpoint_sg"
-    Phase = "phase-5-ecs"
+    Phase = "phase-6-prod"
   }
 }
 # ingress rule: allow incoming HTTPS traffic from Fargate Container Security Group
@@ -30,7 +30,7 @@ resource "aws_security_group" "ecs_fargate_containers_sg" {
 
   tags = {
     Name  = "ecs_fargate_containers_sg"
-    Phase = "phase-5-ecs"
+    Phase = "phase-6-prod"
   }
 }
 # ingress: allow incoming traffic from ALB Security Group on port 8080 (defined in dockerfile)

@@ -9,7 +9,7 @@ resource "aws_security_group" "bape_alb_sg" {
 
   tags = {
     Name  = "bape_alb_sg"
-    Phase = "phase-5-ecs"
+    Phase = "phase-6-prod"
   }
 }
 
@@ -44,7 +44,7 @@ resource "aws_lb" "bape_alb" {
 
   tags = {
     Name  = "bape-alb"
-    Phase = "phase-5-ecs"
+    Phase = "phase-6-prod"
   }
 }
 
@@ -70,7 +70,7 @@ resource "aws_lb_target_group" "bape_alb_tg" {
 
   tags = {
     Name  = "bape-alb-tg"
-    Phase = "phase-5-ecs"
+    Phase = "phase-6-prod"
   }
 }
 

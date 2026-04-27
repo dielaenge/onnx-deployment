@@ -12,7 +12,7 @@ resource "aws_route_table" "all-traffic-to-igw" {
 
   tags = {
     Name  = "bape-vpc-route-table"
-    Phase = "phase-5-ecs"
+    Phase = "phase-6-prod"
   }
 }
 

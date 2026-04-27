@@ -20,7 +20,7 @@ resource "aws_iam_role" "ecs_task_execution_role" {
   )
   tags = {
     Name  = "bape_ecs_task_execution_role"
-    Phase = "phase-5-ecs"
+    Phase = "phase-6-prod"
   }
 }
 
@@ -58,7 +58,7 @@ resource "aws_iam_role_policy" "s3_access" {
       Statement = [{
         Action   = ["s3:GetObject", "s3:PutObject"]
         Effect   = "Allow"
-        Resource = "${aws_s3_bucket.bape_app_data_phase5.arn}/*"
+        Resource = "${aws_s3_bucket.bape_app_data_phase6.arn}/*"
       }]
     }
   )

@@ -23,7 +23,7 @@ resource "aws_iam_role" "github_actions_role" {
         Condition : {
           StringEquals : {
             # restrict AWS access to pushes only on container-orchestration branch
-            "token.actions.githubusercontent.com:sub" : "repo:dielaenge/onnx-deployment:ref:refs/heads/feat/container-orchestration",
+            "token.actions.githubusercontent.com:sub" : "repo:dielaenge/onnx-deployment:ref:refs/heads/feat/production-ready",
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           }
         }
@@ -49,8 +49,8 @@ resource "aws_iam_role_policy" "github_actions_permissions" {
           "s3:ListBucket"
         ]
         Resource =[
-          aws_s3_bucket.bape_app_data_phase5.arn,       # Allows listing the bucket
-          "${aws_s3_bucket.bape_app_data_phase5.arn}/*" # Allows downloading the files inside
+          aws_s3_bucket.bape_app_data_phase6.arn,       # Allows listing the bucket
+          "${aws_s3_bucket.bape_app_data_phase6.arn}/*" # Allows downloading the files inside
         ]
       },
       {

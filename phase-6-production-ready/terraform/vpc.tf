@@ -9,7 +9,7 @@ resource "aws_vpc" "bape-vpc" {
 
   tags = {
     Name  = "bape-vpc"
-    Phase = "phase-5-ecs"
+    Phase = "phase-6-prod"
   }
 }
 
@@ -19,7 +19,7 @@ resource "aws_internet_gateway" "igw" {
 
   tags = {
     Name  = "bape-vpc-igw"
-    Phase = "phase-5-ecs"
+    Phase = "phase-6-prod"
   }
 }
 
@@ -30,7 +30,7 @@ resource "aws_subnet" "pub-sn-A" {
   availability_zone = data.aws_availability_zones.available.names[0]
   tags = {
     Name  = "bape-vpc-pub-sn-A"
-    Phase = "phase-5-ecs"
+    Phase = "phase-6-prod"
   }
 }
 
@@ -40,7 +40,7 @@ resource "aws_subnet" "pub-sn-B" {
   availability_zone = data.aws_availability_zones.available.names[1]
   tags = {
     Name  = "bape-vpc-pub-sn-B"
-    Phase = "phase-5-ecs"
+    Phase = "phase-6-prod"
   }
 }
 
@@ -50,7 +50,7 @@ resource "aws_subnet" "prv-sn-A" {
   availability_zone = data.aws_availability_zones.available.names[0]
   tags = {
     Name  = "bape-vpc-prv-sn-A"
-    Phase = "phase-5-ecs"
+    Phase = "phase-6-prod"
   }
 }
 
@@ -60,6 +60,6 @@ resource "aws_subnet" "prv-sn-B" {
   availability_zone = data.aws_availability_zones.available.names[1]
   tags = {
     Name  = "bape-vpc-prv-sn-B"
-    Phase = "phase-5-ecs"
+    Phase = "phase-6-prod"
   }
 }

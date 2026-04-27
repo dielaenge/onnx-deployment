@@ -6,7 +6,7 @@ output "bape-inference-tf-repository_url" {
 
 output "cloudfront_phase5_url" {
   description = "Edge distribution URL serving the BAPE frontend."
-  value       = aws_cloudfront_distribution.bape_phase5_frontend_s3_distribution.domain_name
+  value       = aws_cloudfront_distribution.bape_phase6_frontend_s3_distribution.domain_name
 }
 
 # Output the Role ARN so we can copy it into our GitHub Actions YAML later
