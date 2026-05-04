@@ -106,12 +106,12 @@ async def call_bape_api(audio_file: UploadFile = File(...)):
     png_key=f"results/{session_id}_spectrogram.png"
 
     try:
-        batch_inference_input, normalized_wav, spectrogram_png, timestamps, input_duration = preprocess_audio(contents)
+        inference_input, normalized_wav, spectrogram_png, timestamps, input_duration = preprocess_audio(contents)
     except Exception as e:
         logger.error("Audio preprocessing failed for %s: %s", audio_file.filename, e)
         raise HTTPException(status_code=400, detail=f"Audio preprocessing failed: {e}")
     
-    logger.info("Preprocessed audio shape: %s", batch_inference_input.shape)
+    logger.info("Preprocessed audio shape: %s", inference_input.shape)
 
     # 4. Safe input to S3
     # 4.1. Upload normalized audio to S3 and generate presigned URL
@@ -134,7 +134,7 @@ async def call_bape_api(audio_file: UploadFile = File(...)):
     
     # 5. Run inference and get results
     start_time = time.perf_counter()
-    model_outputs = processor.run_inference(batch_inference_input)
+    model_outputs = processor.run_inference(inference_input)
     # before sliding window input this returned one list of latent_vectors, quantiles and estimated_params; now this should return multiple of these, which we need to order
     end_time = time.perf_counter()
 
