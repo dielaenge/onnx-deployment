@@ -97,4 +97,90 @@ Pauls requirements: - real-time
 Portfolio requirements:
 - cloud engineering skills; can't tell if distributed architectures or streaming are more sought after, I would guess distributed architectures is a hotter topic but I don't know
 
-I would decide on the "client"'s requirement
+I would decide on the "client"'s requirement and make it real-time instead of distributed.
+
+Opting for a real-time solutions, three hurdles arise:
+1. How to deal wth the 2-second stride and overlap we introduced when evolving from one-shot inference to time-series inference loop? WHat does the client and what does the backend do?
+  a. if the client sends chunks like [0s-4s], [2s-6s], [4s-8s], … 
+    - we force the client to doublke it's upload bandwith as we effectively send everything twice
+  b. if the client sends chunks like [0s-2s], [2s-4s], [4s-6s], … 
+    - the backend can keep the every previous chunk in memory as it is stateful and thus can concatenate it with the current one for inference (equaling a required 4second input); BUT this requires state management on the backend
+
+  DECISION: b. Improve usability on the client side and improve my dev experience with a steeper learning curve.
+
+2. The last deployment used `normalize_with_ffmpeg()` to convert any audio file to 16kHz, Mono Wav. FOr this to happen it saves the full audio to the backends `/tmp` folder and then also writes the converted file to this folder. Doing so every two seconds will weigh heavy on the backend resources.
+The JavaScript Web Audio API allows to natively record audio in 16kHz, Mono WAVs.
+
+Reading the doc. I understood we can use `stream` (from `const stream = await navigator.mediaDevices.getUserMedia({ audio: true });` in index.html) as Input for `createMediaStreamSource(stream)`.
+I will need to define an audio context and a source like
+
+```JS
+const audioCtx = new AudioContext();
+const source = audioCtx.createMediaStreamSource(stream)
+```
+
+3. Up until phase 5, I developed the frontend to display an audio player and the spectrogram after uploading them to presigned URLs. Continuing this in a real-time set up and concatenating images and/or audio chunks would bloat the payload. BUT: This offers an opportunity to add this functionality as a distributed Lambda function which serves both in parallel.
+
+---
+
+Streaming sandbox
+In commit `edfe20b1bedfb33b9505e3a2ed138a8c6e502886: TEST: streaming_sandbox/ holds sandbox files to prototype websocket arch sending/receiving text strings.` I prototyped a websocket connection receiving and sending text strings. 
+In our production pipeline the transmitted format should be raw bytes, already in the correct format (16kHz, Mono, float32array), in order to skip the ffmpeg conversion.
+
+So, what needs to be done on 
+
+… the frontend side (Web Audio API - JavaScript)?
+  - initialize a new audio context
+  - grab the microphone input
+  - use an [`AudioWorklet`](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorklet) to intercept the raw audio data (a Float32Array)
+  - convert array to bytes and send it via websocket, using `ws.send()` (I will need to buffer the input on the client side, up until 2seconds of data are available and are ready for sending)
+
+
+… the backend side (FastAPI - Python)?
+  - edit sandbox script to receive bytes instead of text strings (`await websocket.receive_bytes()`)
+  - convert bytes to NumPy array (`np.frombuffer()`)
+  - manage stateful buffer
+
+The Logic
+- an empty `audio_buffer` NumPy array is defined outside the `while True` loop
+- when 2 seconds of audio are received, they are appended as a chunk to the `audio_buffer`
+- when the buffer has a length of `64000` we have 4 seconds of input (`4 * 16000`) and can run inference on it (log or print what's happening!)
+- cut the buffer in half and keep only the latter part to concatenate with the next 2 secs of input
+  - this creates the stride / overlap
+
+---
+
+To process the raw bytes, the old and deprecated but apparently easier way is to use the [`createScriptProcessor()`](https://developer.mozilla.org/en-US/docs/Web/API/BaseAudioContext/createScriptProcessor) method of the `BaseAudioContext` interface. This feature was replaced by `AudioWorklet` and the `AudioWorkletNode` interface, which is more complex.
+The `AudioWorklet` runs in a separate thread, which allows for more efficient processing of audio data without blocking the main thread. However, it requires writing a custom audio processor (`processor.js`) in JavaScript, which can be more complex than using the `createScriptProcessor()` method. Still, I didn't want to build on deprecated tools just for simplicity. After all the usability of the app will be key and I can't allow the possibility of the script not being compatible on modern browsers.
+A separate article on [Background audio processing using AudioWorklet](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API/Using_AudioWorklet) was also very helpful to understand the processing concepts at play, like [AudioWorkletNode](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletNode) or [AudioWorkletProcessor](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletProcessor).
+
+When switching to AudioWorklet and to multi-threading (read *separated* threads) our scripts can't share variables but instead need to send messages back and forth to communicate (similiar to distributed microservices).
+
+---
+
+### Prototyping the streaming engine
+
+As emtnioned before I needed to create a dedicated `processor.js`. WHat does it do?
+
+1. It defines `RealTimeAudioProcessor` class which extends the `AudioWorkletProcessor` with a `process()` function
+2. `process()` 
+  1. takes the audio input and splits off the left channel to make it Mono and is saved as `inputLeftChannel`
+  2. If there is `inputLeftChannel` available it is transformed to a `Float32Array` and saved as `data``
+  3. It sends `data` via WebSocket.
+3. Registers the new class to make it available for other parts of the pipeline.
+
+In `index.html` the `processor.js` is loaded as a module and made controllable via a `workletNode` (based on audioCtx and using the registered processor as named in `processor.js`). The node is connected to the mic stream, which it will process.
+The node listens and when it gets a message (Float32Arrays from processor.js)…
+…it saves the data from `processor.js` as `rawFloats`.
+…it loops through `rawFloats` and pushes them to `chunkBuffer`
+…when `chunkBuffer` is 2 sconds or longer (>=32000 samples)
+  …it is spliced to exactly 2 seconds / 32000 samples and defined as `chunkToSend`
+  …`chunkToSend` is turned into a `new Float32Array()` called `payload`
+  …`payload` is sent via websocket
+
+In `main.py`, 
+- we receive the payload via `receive_bytes()`, 
+- convert it to a float32 np array
+- concatenate it to the `audio_buffer`
+- when `audio_buffer` holds 4 seconds of input, inference is run (not executed in first prototype.)
+- the first half of `audio_buffer` gets discarded, making space for concatenating new streaming input
