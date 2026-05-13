@@ -140,7 +140,6 @@ class MelSpectrogram:
     
     def __call__(self, input_signal: np.ndarray) -> np.ndarray:
         """Takes 1D audio signal as input and returns the melspectrogram as tensor."""
-        """Takes 1D audio signal as input and returns the melspectrogram as tensor."""
 
         # From here until `return` statement code is copied from BAPE repo
         spec = melspectrogram(
