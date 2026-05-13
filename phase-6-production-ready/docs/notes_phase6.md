@@ -184,3 +184,33 @@ In `main.py`,
 - concatenate it to the `audio_buffer`
 - when `audio_buffer` holds 4 seconds of input, inference is run (not executed in first prototype.)
 - the first half of `audio_buffer` gets discarded, making space for concatenating new streaming input
+
+In order to let my browser allow microphone recording without SSL encryption (as it is not encrypted, when I test locally, I had to set the host from `0.0.0.0` to `127.0.0.1`). The test run was successful and produced the desired print statements:
+
+![print statements from streaming_sandbox/main.py](screenshots/Screenshot%202026-05-06%20at%2014.04.22.png)
+
+The architecture works as desired. 
+
+But, as can be seen, the model is loaded multiple times because I set `reload=true` in the `uvicorn.run()` command. The model is loaded into the *global scope*(?). For local deployment this is acceptable, but on a production server it would not be as this loads the same model multiple times into RAM wasting memory for no reason.
+In the next stage, I will solve this by using the **Lifespan Context Manager** feature. It tells FastAPI to wait until the worker is completely booted up, load the model *once*, forward it to the app, and finally clean it up when the server shuts down.
+
+### Port prototyping code to production files
+
+What needs to be done?
+
+- copy logic from `streaming_sandbox/main.py` and `streaming_sandbox/index.html` to `app/main.py` and `src/index.html` 
+
+- before, D3.js rendered a "finished" input as a whole, now, the frontend JavaScript needs to receive the JSON sent via WebSocket coninuosly and append it to the chart as time moves forward
+
+- as I decided against building the architecture based on an SQS worker, not much of the terraform infra needs to be changed as the ALB I already built support the websocket protocol natively. Really only the code inside the ECS container changes, so I primarily need to replace the container and leave the rest as is
+
+**REMINDER:** 
+
+I must make sure to memorize… 
+- why I decided against the SQS approach (decoupling ≠ real-time)
+- why I skipped the FFmpeg normalization (wasting RAM on the backend, increasing latency)
+- how I skipped the FFmpeg normalization (handle audio transformtion on client side via Web Audio API)
+
+---
+
+May 5 -12 implementing real-time functionality by editing index.html (mostly JavaScript) add commit!!
