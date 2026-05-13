@@ -1,8 +1,7 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket
+from fastapi import FastAPI, WebSocket, Request
 from fastapi.responses import FileResponse
 import uvicorn
 import logging
-import traceback
 from pathlib import Path
 import numpy as np
 from contextlib import asynccontextmanager
@@ -23,10 +22,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("API")
 
-# --- Model init (happens once at server startup) ---
+# --- ONNX model path ---
 MODEL_PATH = BASE_DIR / "models" / "bape_2026-04-13_15-13-22.onnx"
-processor = None
-melspec_preprocessor = None
 
 # --- Preprocessing class `MelSpectrogram` copied from [BAPE repository: bape/src/util/signals.py](https://github.com/philipp-goetz/bape/blob/7988f939d1c69301e31d322fecbbaa2a031ef3e1/src/util/signals.py) and adapted (see comments) for deployment---
 
@@ -82,11 +79,12 @@ class MelSpectrogram:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     
-    # AT STARTUP: initialize processor and melspec_
-    global processor, melspec_preprocessor
+    # AT STARTUP: initialize processor and melspec_processor 
+    logger.info("BAPE app starting up…")
     # initialize model and melspec preprocessor
-    processor = AcousticModelProcessor(MODEL_PATH)
-    melspec_preprocessor = MelSpectrogram(
+    app.state.processor = AcousticModelProcessor(MODEL_PATH)
+    logger.info("AcousticModelProcessor initialized as processor.")
+    app.state.melspec_preprocessor = MelSpectrogram(
     sr=16000, 
     n_fft=64, 
     hop_size=32, 
@@ -97,12 +95,16 @@ async def lifespan(app: FastAPI):
     log_mag=True,
     trunc=2000
     )
-    
+    logger.info("MelSpectrogram initialized as melspec_preprocessor.")
+
     yield
 
+    logger.info("BAPE app shutting down…")
     # AT SHUTDOWN: Clean up the ML models and release the resources
-    processor = None
-    melspec_preprocessor = None
+    app.state.processor = None
+    logger.info("CLEANUP: processor set to None.")
+    app.state.melspec_preprocessor = None
+    logger.info("CLEANUP: melspec_preprocessor set to None.")
     
 app = FastAPI(lifespan=lifespan)
 
@@ -110,8 +112,9 @@ app = FastAPI(lifespan=lifespan)
 
 #HEALTHCHECK ENDPOINT
 @app.get("/health")
-def health_check():
+def health_check(request: Request):
     """Healthcheck endpoint."""
+    processor = request.app.state.processor
     return {
         "status": "ok",
         "model_loaded": processor is not None
@@ -130,23 +133,25 @@ async def get_processor():
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    print("Client connected via WebSocket.")
-    
+    logger.info("Client connected via WebSocket.")
+
+    processor = websocket.app.state.processor
+    melspec_preprocessor = websocket.app.state.melspec_preprocessor
     audio_buffer = np.array([], dtype=np.float32)
     try:
         while True:
-            # receive binary data from frontend
+            # receive binary data from frontend websocket endpoint
             raw_data = await websocket.receive_bytes()
 
             # convert bytes to float32 np array
             converted_data = np.frombuffer(raw_data, dtype=np.float32)
             
-            # add 2 second converted_data (spliced in index.html's JavaScript) to rolling buffer
+            # concatenate converted_data (spliced in index.html's startRecording function) to rolling audio_buffer
             audio_buffer = np.concatenate((audio_buffer, converted_data))
 
             #check if buffer has enough data for 4 seconds (required by onnx model)
             if len(audio_buffer) >= 64000:
-                print(f"4 second window available. Ready to run inference.")
+                logger.info("4 second window available. Ready to run inference.")
                 spectrogram_chunk = melspec_preprocessor(audio_buffer)
 
                 # calculate mean and standard
@@ -164,7 +169,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
                 # run inference
-                print(f"Running inference on shape: {standardized_spectrogram_4d.shape}")
+                logger.info("Running inference on shape: %s", standardized_spectrogram_4d.shape)
                 results = processor.run_inference(standardized_spectrogram_4d)
 
 
@@ -176,7 +181,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 }
 
                 # Print the shape to confirm, and just the first 3 parameter estimates 
-                print(f"Inference complete.\nFirst three T60 Params: {response_payload['params'][0][0][:3]}")
+                logger.info("Inference complete.\nFirst three T60 Params: %s", response_payload['params'][0][0][:3])
 
                 # send results
                 await websocket.send_json(response_payload)
@@ -188,8 +193,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 audio_buffer = audio_buffer[-32000:]
 
     except Exception as e:
-        print(f"Connection closed: {e}")
-        traceback.print_exc()
+        logger.exception("Error in Websocket: %s", e)
+        await websocket.send_text("ERROR: Internal server error.")
+        await websocket.close()
+
 
 # LAUNCH
 if __name__ == "__main__":
