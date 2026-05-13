@@ -1,14 +1,14 @@
-import os
-import boto3
-from botocore.exceptions import ClientError
-
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, WebSocket
+from fastapi.responses import FileResponse
 import uvicorn
-import time
-import json
 import logging
-import uuid
+import traceback
 from pathlib import Path
+import numpy as np
+from contextlib import asynccontextmanager
+from librosa.feature import melspectrogram
+import torch
+from torch import Tensor
 
 # Identify Base Directory
 BASE_DIR = Path(__file__).resolve().parent
@@ -23,52 +23,88 @@ logging.basicConfig(
 )
 logger = logging.getLogger("API")
 
-app = FastAPI(title="BAPE API")
-
-# S3 BRIDGE
-def upload_artifact_and_get_presigned_url(file_bytes: bytes, object_key: str, content_type:str):
-    """
-    Upload a file to an S3 bucket, if upload succeeds, return presigned URL    
-    """
-
-    # set bucket as env var
-    BUCKET_NAME=os.environ.get("APP_BUCKET_NAME")
-    # initialize S3 client
-    s3_client = boto3.client('s3')
-    # Safe object to S3
-    try:
-        # 1. put_object for raw bytes
-        s3_client.put_object(
-            Bucket=BUCKET_NAME,
-            Key=object_key,
-            Body=file_bytes,
-            ContentType=content_type
-        )
-
-        # 2. Generate presigned URL
-        url = s3_client.generate_presigned_url(
-            'get_object',
-            Params={'Bucket': BUCKET_NAME, 'Key': object_key},
-            # Presigned URL expires after 5 minutes
-            ExpiresIn=300,
-        )
-        return url
-
-    except Exception as e:
-        logger.error(f"S3 Bridge Error:{e}")
-        return None
-    
-
 # --- Model init (happens once at server startup) ---
 MODEL_PATH = BASE_DIR / "models" / "bape_2026-04-13_15-13-22.onnx"
-#print(f"DEBUG: Loading model from {MODEL_PATH}")
-
 processor = None
-try:
+melspec_preprocessor = None
+
+# --- Preprocessing class `MelSpectrogram` copied from [BAPE repository: bape/src/util/signals.py](https://github.com/philipp-goetz/bape/blob/7988f939d1c69301e31d322fecbbaa2a031ef3e1/src/util/signals.py) and adapted (see comments) for deployment---
+
+class MelSpectrogram:
+    """Spectrogram with a mel frequency scale"""
+    def __init__(
+        self, 
+        sr: float = 16000.0, 
+        n_fft: int = 64, 
+        hop_size: int = 16,
+        n_mels: int = 17, 
+        fmin: float = 100.0, 
+        fmax: float = 8000,
+        power: float = 2.0, 
+        log_mag: bool = False, 
+        # c_mag: Optional[float] = None, (not used for SpeechEncoder model)
+        trunc: int | None = None,
+) -> None:
+        self.sr, self.n_fft, self.hop_size, self.n_mels = sr, n_fft, hop_size, n_mels
+        self.fmin, self.fmax, self.power, self.log_mag = fmin, fmax, power, log_mag
+        self.trunc = trunc
+        # self.freqs = mel_frequencies(n_mels=n_mels, fmin=fmin, fmax=fmax) #not used in the __call__ function
+    
+    def __call__(self, input_signal: np.ndarray) -> np.ndarray:
+        """Takes 1D audio signal as input and returns the melspectrogram as tensor."""
+
+        # From here until `return` statement code is copied from BAPE repo
+        spec = melspectrogram(
+            y=input_signal, sr=self.sr, n_fft=self.n_fft, hop_length=self.hop_size,
+            n_mels=self.n_mels, fmin=self.fmin, fmax=self.fmax, power=1.0,
+        )
+        spec = Tensor(spec)
+        spec /= spec.max()
+        spec = spec.pow(self.power)
+        if self.log_mag:
+            spec = 10 * torch.log10(spec + 1e-12)
+        if self.trunc is not None:
+            nbins, length = spec.size()
+            if length < self.trunc:
+                spec = torch.cat(
+                    (spec, torch.zeros((nbins, self.trunc - length))), dim=-1
+                )
+            else:
+                spec = spec[:, : self.trunc]
+
+        return spec
+
+# contextlib.asynccontextmanager used witht the lifespan parameter is recommended for defining app startup and shutdown in FastAPI
+
+# the @asynccontextmanager decorator creats an asynchronous context manager
+# it expects an asynchronous function which *yield*s exactly one value
+# the code before yield is run at startup, the code after at shutdown
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    
+    # AT STARTUP: initialize processor and melspec_
+    global processor, melspec_preprocessor
+    # initialize model and melspec preprocessor
     processor = AcousticModelProcessor(MODEL_PATH)
-except Exception as e:
-    logger.critical("FATAL: Could not load model at startup. Server will fail on requests. Error: %s", e)
-    # note: No exit here as we just set processor = None
+    melspec_preprocessor = MelSpectrogram(
+    sr=16000, 
+    n_fft=64, 
+    hop_size=32, 
+    n_mels=16, 
+    fmin=20, 
+    fmax=8000, 
+    power=2.0, 
+    log_mag=True,
+    trunc=2000
+    )
+    
+    yield
+
+    # AT SHUTDOWN: Clean up the ML models and release the resources
+    processor = None
+    melspec_preprocessor = None
+    
+app = FastAPI(lifespan=lifespan)
 
 #API ENDPOINTS
 
@@ -81,100 +117,80 @@ def health_check():
         "model_loaded": processor is not None
         }
 
-@app.post("/acou-vec/generate")
-async def call_bape_api(audio_file: UploadFile = File(...)):
-    
-    if processor is None:
-        raise HTTPException(status_code=503, detail="Service unavailable: Model not loaded.")
-    
-    logger.info("Received file: %s (%s)", audio_file.filename, audio_file.content_type)
+# DEFAULT ENDPOINT
+@app.get("/")
+async def get():
+    return FileResponse( BASE_DIR / ".."  / "src" / "index.html")
 
-    # 1. Input validation
-    if not audio_file.content_type or not audio_file.content_type.startswith("audio/"):
-        logger.warning("Upload failed: Invalid file type received: %s", audio_file.content_type)
-        raise HTTPException(status_code=400, detail="Invalid file type. Must be audio.")
+@app.get("/processor.js")
+async def get_processor():
+    return FileResponse( BASE_DIR / ".." / "src" / "processor.js")
+
+# establish websocket connection
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    print("Client connected via WebSocket.")
     
-    # 2. Load audio bytes asynchronously
-    contents = await audio_file.read()
-
-
-    # 3. Preprocess audio input using modular function from audio_processor.py
-    
-    # intialize a preprocessing session variable for naming files
-    session_id=str(uuid.uuid4())
-    wav_key=f"results/{session_id}_input.wav"
-    png_key=f"results/{session_id}_spectrogram.png"
-
+    audio_buffer = np.array([], dtype=np.float32)
     try:
-        inference_input, normalized_wav, spectrogram_png, timestamps, input_duration = preprocess_audio(contents)
+        while True:
+            # receive binary data from frontend
+            raw_data = await websocket.receive_bytes()
+
+            # convert bytes to float32 np array
+            converted_data = np.frombuffer(raw_data, dtype=np.float32)
+            
+            # add 2 second converted_data (spliced in index.html's JavaScript) to rolling buffer
+            audio_buffer = np.concatenate((audio_buffer, converted_data))
+
+            #check if buffer has enough data for 4 seconds (required by onnx model)
+            if len(audio_buffer) >= 64000:
+                print(f"4 second window available. Ready to run inference.")
+                spectrogram_chunk = melspec_preprocessor(audio_buffer)
+
+                # calculate mean and standard
+                mean = spectrogram_chunk.mean()
+                std = spectrogram_chunk.std()
+
+                # standardize raw spectrogram tensor
+                standardized_spectrogram = (spectrogram_chunk - mean) / (std + 1e-12)
+
+                # convert to numpy array
+                standardized_spectrogram_nparray = standardized_spectrogram.numpy()
+                
+                # reshape to 4D tensor
+                standardized_spectrogram_4d = np.expand_dims(standardized_spectrogram_nparray, axis=(0,1))
+
+
+                # run inference
+                print(f"Running inference on shape: {standardized_spectrogram_4d.shape}")
+                results = processor.run_inference(standardized_spectrogram_4d)
+
+
+                # onnx model returns a list of 3 np arrays, which need to be converted to standard python lists so we can send them as a JSON
+                response_payload = {
+                    "latents": results["latents"].tolist(),
+                    "params": results["params"].tolist(),
+                    "quantiles": results["quantiles"].tolist()
+                }
+
+                # Print the shape to confirm, and just the first 3 parameter estimates 
+                print(f"Inference complete.\nFirst three T60 Params: {response_payload['params'][0][0][:3]}")
+
+                # send results
+                await websocket.send_json(response_payload)
+                
+                # confirm completed inference
+                await websocket.send_text("DUMMY: Inference complete for window.")
+
+                # slice buffer to keep the latter half of the window (2 seconds; which will be concatenated with new input if available)
+                audio_buffer = audio_buffer[-32000:]
+
     except Exception as e:
-        logger.error("Audio preprocessing failed for %s: %s", audio_file.filename, e)
-        raise HTTPException(status_code=400, detail=f"Audio preprocessing failed: {e}")
-    
-    logger.info("Preprocessed audio shape: %s", inference_input.shape)
-
-    # 4. Safe input to S3
-    # 4.1. Upload normalized audio to S3 and generate presigned URL
-    try:
-        wav_url=upload_artifact_and_get_presigned_url(normalized_wav, wav_key, "audio/wav")
-    
-    except ClientError as e:
-        logging.error(e)
-        return None
-
-    # 4.2. Upload to normalized audio to S3 and generate presigned URL
-    try:
-        png_url=upload_artifact_and_get_presigned_url(spectrogram_png, png_key, "image/png")
-    
-    except ClientError as e:
-        logging.error(e)
-        return None
-
-    print(f"Spectrogram for entire input available via {png_url}. Normalized wav input available via {wav_url}. These links will time out after 1 minute. The objects will be deleted in 24 hours.")
-    
-    # 5. Run inference and get results
-    start_time = time.perf_counter()
-    model_outputs = processor.run_inference(inference_input)
-    # before sliding window input this returned one list of latent_vectors, quantiles and estimated_params; now this should return multiple of these, which we need to order
-    end_time = time.perf_counter()
-
-    processing_time_ms = (end_time - start_time) * 1000
-    
-    logger.info("Inference complete for %s. Time: %s.3f ms", audio_file.filename, processing_time_ms)
-
-    # 6. API respone: Map batch results to timestamps
-    batch_fingerprints = model_outputs['latents'] # shape is (N,1024); was (1, 1024)
-    batch_estimated_params = model_outputs['params'] # shape is (N,7,3); was (1,7,3) for estimated_params
-    batch_quantiles  = model_outputs['quantiles'] # shape is (N,6,2); (1,6,2)
-
-    # map each timestampt to a result
-    timeline_of_results=[]
-
-    for timestamp_step, param_estimation_step, quantiles_step, fingerprint_step in zip(timestamps, batch_estimated_params, batch_quantiles, batch_fingerprints):
-        frame = {
-            "timestamp_step": timestamp_step,
-            "BAPEs": param_estimation_step.flatten().tolist(),
-            "quantiles": quantiles_step.flatten().tolist(),
-            "fingerprint": "processed - output tbd"
-        }
-        timeline_of_results.append(frame)
-
-
-    return {
-        "request_metadata": {        
-            "filename": audio_file.filename,
-            "input_duration": f"{round(input_duration,2)} seconds",
-            "processing_time_ms": f"{round(processing_time_ms, 0)} milliseconds"
-        },
-
-        "preprocessed_inputs": {
-          "png_url": png_url,
-          "wav_url": wav_url
-        },
-
-        "timeline_of_results": timeline_of_results
-    }
+        print(f"Connection closed: {e}")
+        traceback.print_exc()
 
 # LAUNCH
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
