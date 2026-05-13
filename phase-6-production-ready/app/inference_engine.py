@@ -1,6 +1,10 @@
 import onnxruntime as ort
 import numpy as np
+from pathlib import Path
 import logging
+
+# Identify Base Directory
+BASE_DIR = Path(__file__).resolve().parent
 
 logger = logging.getLogger(__name__)
 providers=["CPUExecutionProvider"]

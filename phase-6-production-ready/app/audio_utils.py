@@ -8,10 +8,6 @@ import io
 import pathlib
 
 import numpy as np
-import matplotlib
-# explicitly set the Anti-Grain Geometry backend which is designed for headless servers
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 import librosa
 import torch
 from torch import Tensor
@@ -26,95 +22,8 @@ logger = logging.getLogger("AUDIO_UTILS")
 
 TARGET_SR = 16000 # target sample rate – placeholder value but a common one
 
-# Normalizing any input to the required wav format
-
-def normalize_with_ffmpeg(audio_bytes: bytes, target_sr: int = 16000) -> np.ndarray:
-    """
-    Librosa/Soundfile cannot read compressed formats (M4A/WebM) 
-    from memory streams. They need a real file on disk.
-
-    Saves audio bytes to disk, uses FFmpeg to convert any format to 
-    16kHz Mono WAV, and loads it back.
-    """
-    # 1. Generate unique temp filenames (prevents collisions in parallel requests)
-    # /tmp is the only writable place in Lambda
-    session_id = str(uuid.uuid4())
-    input_path = f"/tmp/{session_id}_in"  # FFmpeg figures out the extension
-    output_path = f"/tmp/{session_id}_out.wav"
-
-    try:
-        # 2. Dump raw bytes to disk
-        with open(input_path, "wb") as f:
-            f.write(audio_bytes)
-
-        # 3. The FFmpeg convertion command
-        # -y: Overwrite output
-        # -i: Input file
-        # -ar: Audio Rate (Resample to 16000)
-        # -ac: Audio Channels (Mix down to 1 Mono channel)
-        # -loglevel error: Don't clutter logs unless it fails
-        cmd = [
-            "ffmpeg", 
-            "-y", 
-            "-i", input_path, 
-            "-ar", str(target_sr), 
-            "-ac", "1", 
-            "-loglevel", "error", 
-            output_path
-        ]
-        
-        # Run subprocess. check=True raises an error if FFmpeg fails (exit code != 0)
-        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-        # 4. Load the clean WAV
-        # FFmpeg did the resampling, but passing sr=target_sr is a good safety check
-        audio_array, _ = librosa.load(output_path, sr=TARGET_SR)
-
-        # 5. Get the cleaned WAV for the frontend ("r"eading as "b"inary)
-        with open(output_path, "rb") as f:
-            clean_wav=f.read()
-            
-        return audio_array, clean_wav
-
-    except subprocess.CalledProcessError as e:
-        # Capture FFmpeg stderr (Standar Error) for debugging
-        logging.error(f"FFmpeg failed: {e.stderr.decode()}")
-        raise RuntimeError(f"Could not process audio file: {e.stderr.decode()}")
-        
-    except Exception as e:
-        logging.error(f"Audio processing error: {str(e)}")
-        raise e
-
-    finally:
-        # Cleanup: Look for any uploaded and normalized files and delete them
-        # If we don't delete files, /tmp is filled up to its 512MB limit and Lambda crashes
-        if os.path.exists(input_path):
-            os.remove(input_path)
-        if os.path.exists(output_path):
-            os.remove(output_path)
-
-# generating the spectrogram image 
-def generate_spectrogram_image(spectrogram_2d: np.ndarray) -> str:
-    """
-    Converts the 2D Spectrogram (a numpy array) into a PNG in bytes.
-    """
-    plt.figure(figsize=(10,4))
-
-    # Render the spectrogram using matplotlib's imshow instead of librosa's display
-    # imshow is lighter and doesn't require importing librosa.display
-    # origin='lower' ensures low frequencies are at the bottom
-    # cmap defines colormap, viridis is the default
-    plt.imshow(spectrogram_2d, aspect="auto", origin="lower", cmap="viridis")
-    plt.axis('off') # hide axis for cleaner look
-    plt.tight_layout(pad=0) #padding layout
-
-    #save the plot to memory buffer
-    buf=io.BytesIO()
-    plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
-    plt.close() #close plot to save memory
-    spectrogram_png=buf.getvalue()
-
-    return spectrogram_png #returns png in bytes
+# before, we did audio normalization at this point but this is now handled via the Web Audio API
+# also, we used generate_spectrogram_image() at this point to create the spectrogram PNG, we will add this later as a distributed microservice to prevent increasing latency
 
 # --- Preprocessing class `MelSpectrogram` copied from [BAPE repository: bape/src/util/signals.py](https://github.com/philipp-goetz/bape/blob/7988f939d1c69301e31d322fecbbaa2a031ef3e1/src/util/signals.py) and adapted (see comments) for deployment---
 
@@ -139,7 +48,6 @@ class MelSpectrogram:
         # self.freqs = mel_frequencies(n_mels=n_mels, fmin=fmin, fmax=fmax) #not used in the __call__ function
     
     def __call__(self, input_signal: np.ndarray) -> np.ndarray:
-        """Takes 1D audio signal as input and returns the melspectrogram as tensor."""
         """Takes 1D audio signal as input and returns the melspectrogram as tensor."""
 
         # From here until `return` statement code is copied from BAPE repo
@@ -176,101 +84,28 @@ melspec_preprocessor = MelSpectrogram(
     log_mag=True
     )
 
-def slice_spectrogram(standardized_spectrogram):
-    # the model expects spectrograms 2000 frames wide ( 4 seconds )
-    window_frames = 2000
-    # we want to create overlapping spectrograms
-    # subsequent spectrograms contain latter half of predecessor
-    stride_frames = 1000
+# deleted `def slice_spectrogram()` as the real-time processing via websocket follows a different logic
 
-    # create empty lists for slices and timestamps
-    slices=[]
-    timestamps_sec=[]
-
-    # store amount of total frames; shape[1]
-    total_frames = standardized_spectrogram.shape[1]
-
-    # loop step by step through entire input range, start at 0, end at end of input, move in stride_frames / 2 second steps
-    for step in range(0, total_frames, stride_frames):
-        
-        # avoid heavily zero-padded ghost window in case tail end is <=100 frames
-        remaining_frames = total_frames - step
-        if step > 0 and remaining_frames <= (stride_frames + 100):
-            break
-        
-        # set start and end for step
-        start = step
-        end = step + window_frames
-
-        # extract 2D chunk from entire input (select all rows (1), and columns from start to end [16, 2000])
-        chunk = standardized_spectrogram[:,start:end]
-
-        # if last step is bigger than remaining input
-        if chunk.shape[1] < window_frames :
-            # how much input is missing for a full window?
-            padding_required = window_frames - chunk.shape[1]
-            # pad remaining input:
-            # no vertical padding
-            # only horizontal padding_required to the right
-            chunk = np.pad(chunk, ((0,0), (0, padding_required)), mode="constant")
-        
-        # append chunk to slices
-        slices.append(chunk)
-
-        # calculate timestamp second for this step // 2000 frames = 4 secs; 1 sec = 500 frames
-        timestamp_sec = step / 500
-        timestamps_sec.append(timestamp_sec)
-
-        # break when end exceeds total amount of frames
-        if end >= total_frames:
-            logger.info("end: %s, > = total_frames: %s", end, total_frames)
-            break
-
-    return slices, timestamps_sec
-
-
+# also delete preprocess_audio()
 
 def preprocess_audio(audio_bytes: bytes): #in phase 3 this was a path but after adding the normalization function it expects raw audio bytes
     """Preprocesses audio and returns normalized wav, spectrogram as array and png."""
 
     try:
-        #normalize audio
-        audio_array, clean_wav = normalize_with_ffmpeg(audio_bytes, target_sr=16000)
-        
-        input_duration = len(audio_array)/16000
-
         #generate one full spectrogram (tensor)
-        #generate one full spectrogram (tensor)
-        raw_spectrogram = melspec_preprocessor(audio_array)
+        raw_spectrogram = melspec_preprocessor(audio_bytes)
 
-        # calculate mean and standard
         # calculate mean and standard
         mean = raw_spectrogram.mean()
         std = raw_spectrogram.std()
 
         # standardize raw spectrogram tensor
         standardized_spectrogram = (raw_spectrogram - mean) / (std + 1e-12)
-        # standardize raw spectrogram tensor
-        standardized_spectrogram = (raw_spectrogram - mean) / (std + 1e-12)
 
-        # generate PNG (binary) from standarized spectrogram
-        std_spectrogram_png = generate_spectrogram_image(standardized_spectrogram)
+        # TBD: add timestamps to real-time chunks!!
         
-        # slice full spectrogram; 
-        slices, timestamps = slice_spectrogram(standardized_spectrogram)
-
-        # batch slices into one 3D array (N, 16, 2000)
-        batched_spectrograms_3d = np.stack(slices, axis=0)
-
-        # add channel dimension at index 1
-        batched_spectrograms_4d = np.expand_dims(batched_spectrograms_3d, axis=1)
-        
-        # Return 
-        # - final numpy array (batched_spectrograms_4d)
-        # - normalized wav (clean_wav)
-        # - spectrogram for entire input (spectrogram_png)
-        # - timestamps in seconds (timestamps) – necessary for correct visualization
-        return batched_spectrograms_4d, clean_wav, std_spectrogram_png, timestamps, input_duration
+        # Return standardized melspectrogram
+        return standardized_spectrogram
     
     except Exception as e:
         logging.error(f"Spectrogram generation failed: {e}")
