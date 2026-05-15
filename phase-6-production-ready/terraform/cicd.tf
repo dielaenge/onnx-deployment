@@ -44,11 +44,11 @@ resource "aws_iam_role_policy" "github_actions_permissions" {
       {
         # Permission to download the ONNX and ONNX.DATA during CI/CD build
         Effect = "Allow"
-        Action =[
+        Action = [
           "s3:GetObject",
           "s3:ListBucket"
         ]
-        Resource =[
+        Resource = [
           aws_s3_bucket.bape_app_data_phase6.arn,       # Allows listing the bucket
           "${aws_s3_bucket.bape_app_data_phase6.arn}/*" # Allows downloading the files inside
         ]

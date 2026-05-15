@@ -45,7 +45,7 @@ resource "aws_ecs_task_definition" "task_definition_bape" {
         }
       }
     }
-])
+  ])
 }
 
 # ECS Cluster
@@ -54,7 +54,7 @@ resource "aws_ecs_cluster" "bape_cluster" {
   setting {
     name  = "containerInsights"
     value = "enhanced"
-    }
+  }
 }
 
 # ECS Service
