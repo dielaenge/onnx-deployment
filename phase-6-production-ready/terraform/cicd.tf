@@ -60,7 +60,7 @@ resource "aws_iam_role_policy" "github_actions_permissions" {
         Resource = "*"
       },
       {
-        # Permission to push to bape-inference-tf ECR repository
+        # Permission to push to bape-phase6-inference ECR repository
         Effect = "Allow"
         Action = [
           "ecr:BatchCheckLayerAvailability",
