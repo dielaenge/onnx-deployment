@@ -14,7 +14,7 @@ resource "aws_ecs_task_definition" "task_definition_bape" {
   container_definitions = jsonencode([
     {
       name      = "bape-container"
-      image     = "${aws_ecr_repository.bape-inference-tf.repository_url}:latest"
+      image     = "${aws_ecr_repository.bape-phase6-inference.repository_url}:phase6"
       essential = true
       portMappings = [
         {
