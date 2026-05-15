@@ -6,8 +6,6 @@ resource "aws_s3_bucket" "bape_phase6_frontend" {
   }
 }
 
-
-
 # See https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html
 data "aws_iam_policy_document" "origin_bucket_policy" {
   statement {
@@ -33,6 +31,14 @@ data "aws_iam_policy_document" "origin_bucket_policy" {
       values   = [aws_cloudfront_distribution.bape_phase6_frontend_s3_distribution.arn]
     }
   }
+}
+
+data "aws_cloudfront_origin_request_policy" "all_viewer" {
+  name = "Managed-AllViewer"
+}
+
+data "aws_cloudfront_cache_policy" "caching_disabled" {
+  name = "Managed-CachingDisabled"
 }
 
 resource "aws_s3_bucket_policy" "bape_phase6_frontend_bucket_policy" {
@@ -84,13 +90,14 @@ resource "aws_cloudfront_distribution" "bape_phase6_frontend_s3_distribution" {
   }
 
   ordered_cache_behavior {
-    path_pattern    = "/acou-vec/*"
+    path_pattern    = "/ws"
     allowed_methods = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods  = ["GET", "HEAD"]
-    #CachingDisabled Policy
-    cache_policy_id        = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
-    target_origin_id       = aws_lb.bape_alb.id
-    viewer_protocol_policy = "redirect-to-https"
+    cached_methods  = []
+    cache_policy_id = data.aws_cloudfront_cache_policy.caching_disabled.id
+    #AllViewer origin request policy
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id
+    target_origin_id         = aws_lb.bape_alb.id
+    viewer_protocol_policy   = "redirect-to-https"
   }
 
   price_class = "PriceClass_100"
