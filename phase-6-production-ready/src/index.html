@@ -27,7 +27,7 @@
             </div>
             <!-- Mic Section -->
             <div class="flex flex-col items-center space-y-4">
-                <button id="mic-btn" value="start" class="h-24 w-24 rounded-full bg-slate-900 flex items-center justify-center transition-all duration-500 hover:border-blue-500/50 border-2 border-slate-800 shadow-inner">
+                <button id="mic-btn" class="h-24 w-24 rounded-full bg-slate-900 flex items-center justify-center transition-all duration-500 hover:border-blue-500/50 border-2 border-slate-800 shadow-inner">
                     <svg id="mic-icon" xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 1v11m0 0a4 4 0 004-4V5a4 4 0 00-8 0v3a4 4 0 004 4z" />
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 10v1a7 7 0 01-14 0v-1m10 8a3 3 0 11-6 0" />
@@ -214,8 +214,22 @@ const micBtn = document.getElementById('mic-btn');
 micBtn.addEventListener("click", startRecording);
 
 const statusText = document.getElementById('status-text');
+const recText = document.getElementById('rec-text');
 const jsonResult = document.getElementById('json-result');
 const resultArea = document.getElementById('result-area');
+
+// Web Audio API
+let ws = new WebSocket("wss://localhost:8000/ws")
+let audioContext;
+let micStream;
+
+// chunkBuffer will be used to store 32000 samples / 2 seconds of audio and then send it
+let chunkBuffer = [];
+
+let currentTimelineData = []; // was null before, now empty array
+let timeCounter = 0; // will serve as time indicator and be increased by 2 for every chunk
+
+let lockedParamId = null; //locked param_id to trigger
 
 // FREQUENCY BANDS
 const bandLabels = [
@@ -233,6 +247,69 @@ const bandLabels = [
 // https://d3js.org/d3-scale-chromatic/sequential#interpolateWarm
 const colorScale = d3.scaleSequential(d3.interpolateWarm)
     .domain([0, 6]); // 0 is 125Hz (Bass), 6 is 8kHz (Treble)
+
+// RECORDING LOGIC
+
+async function startRecording(){
+    // get the mic stream
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // set mic to record at 16kHz sample rate
+    audioContext = new AudioContext({sampleRate: 16000});
+    // set mic stream as source
+    const source = audioContext.createMediaStreamSource(micStream);
+    // load external processor.js script into the AudioContext
+    await audioContext.audioWorklet.addModule('processor.js');
+
+    // create the node, which serves as a controller/processor to the processor; it's our actual interface
+    const workletNode = new AudioWorkletNode(audioContext, 'real-time-audio-processor');
+
+    // Listen for messages from processor.js
+    workletNode.port.onmessage = function(event) {
+        const rawFloats = event.data; // this is the left channel float32array defined in processor.js
+
+        // Loop through rawFloats and push each value into chunkBuffer
+        for (let i = 0; i < rawFloats.length; i++) {
+            chunkBuffer.push(rawFloats[i]);
+        }
+        // If chunkBuffer.length >= 32000 (2 seconds at 16kHz):
+        if (chunkBuffer.length >= 32000) {
+            // cut the first 32000 samples from the chunk, if there is a remainder it stays in the chunkBuffer
+            const chunkToSend = chunkBuffer.splice(0, 32000);
+            // Convert chunkBuffer into a new Float32Array
+            const payload = new Float32Array(chunkToSend);
+            // send it over the websocket connect
+            ws.send(payload);
+        }
+    }
+    // connect the node
+    source.connect(workletNode);
+
+    console.log("Recording started");
+    micBtn.removeEventListener("click", startRecording);
+    micBtn.addEventListener("click", stopRecording);
+    statusText.innerText = "…starting inference session…";
+    recText.innerText = "Tap microphone again to stop recording.";
+};
+
+function stopRecording() {
+    // 1. Stop the microphone recording
+    if (typeof micStream !== 'undefined') {
+        micStream.getTracks().forEach(track => track.stop());
+    }
+    
+    // 2. Stop the audio processing environment
+    if (typeof audioContext !== 'undefined' && audioContext.state !== 'closed') {
+        audioContext.close();
+        statusText.innerText = "Recording stream closed.";
+        recText.innerText = "Reload page for new inference session.";
+        micBtn.classList.add('hidden');
+    }
+    
+    // 3. Close the WebSocket connection to the server
+    if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+    }
+};
 
 // BUILD LEGEND
 function buildLegend() {
@@ -354,59 +431,6 @@ function buildLegend() {
 };
 
 window.onload = buildLegend;
-
-// Web Audio API
-let ws = new WebSocket("ws://localhost:8000/ws")
-let audioContext;
-let micStream;
-
-// chunkBuffer will be used to store 32000 samples / 2 seconds of audio and then send it
-let chunkBuffer = [];
-
-let currentTimelineData = []; // was null before, now empty array
-let timeCounter = 0; // will serve as time indicator and be increased by 2 for every chunk
-
-let lockedParamId = null; //locked param_id to trigger
-
-async function startRecording(){
-    // get the mic stream
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    // set mic to record at 16kHz sample rate
-    audioContext = new AudioContext({sampleRate: 16000});
-    // set mic stream as source
-    const source = audioContext.createMediaStreamSource(micStream);
-    // load external processor.js script into the AudioContext
-    await audioContext.audioWorklet.addModule('processor.js');
-
-    // create the node, which serves as a controller/processor to the processor; it's our actual interface
-    const workletNode = new AudioWorkletNode(audioContext, 'real-time-audio-processor');
-
-    // Listen for messages from processor.js
-    workletNode.port.onmessage = function(event) {
-        const rawFloats = event.data; // this is the left channel float32array defined in processor.js
-
-        // Loop through rawFloats and push each value into chunkBuffer
-        for (let i = 0; i < rawFloats.length; i++) {
-            chunkBuffer.push(rawFloats[i]);
-        }
-        // If chunkBuffer.length >= 32000 (2 seconds at 16kHz):
-        if (chunkBuffer.length >= 32000) {
-            // cut the first 32000 samples from the chunk, if there is a remainder it stays in the chunkBuffer
-            const chunkToSend = chunkBuffer.splice(0, 32000);
-            // Convert chunkBuffer into a new Float32Array
-            const payload = new Float32Array(chunkToSend);
-            // send it over the websocket connect
-            ws.send(payload);
-        }
-    }
-    // connect the node
-    source.connect(workletNode);
-
-    console.log("Recording started");
-    micBtn.removeEventListener("click", startRecording);
-    micBtn.addEventListener("click", stopRecording);
-    micBtn.value = "stop";
-};
 
 // D3 visualisation
 function drawChart(timelineData) {
@@ -631,11 +655,6 @@ function drawChart(timelineData) {
 
 // when websocket receives message
 ws.onmessage = function(event) {
-    // if it's the DUMMY message confirming the inference, ignore it
-    if (typeof event.data === "string" && event.data.includes("DUMMY")) {
-        return;
-    }
-
     // parse the data from the main.py backend, which is on the other end of the websocket connection
     const incomingData = JSON.parse(event.data);
     // drawChart(), the D3.js script, expects a time counter and two one-dimensional arrays (correct?)
@@ -643,6 +662,7 @@ ws.onmessage = function(event) {
     // grab the first bacth [0] and flatten to a 1D array
     const newWindow = {
         timestamp_step: timeCounter,
+        time: `${timeCounter} – ${timeCounter + 4} seconds`,
         t60_BAPEs: incomingData.params[0].flat(),
         quantiles: incomingData.quantiles[0].flat()
     };
@@ -662,33 +682,16 @@ ws.onmessage = function(event) {
     } */
 
     // Frontend debugging
-    console.log("Raw Incoming Data:", incomingData);
-    console.log("Formatted Frame for D3:", newWindow);
+    // console.log("Raw Incoming Data:", incomingData);
+    // console.log("Formatted Frame for D3:", newWindow);
 
     drawChart(currentTimelineData);
 
     statusText.innerText = "Analyzing audio stream…";
-    jsonResult.textContent = JSON.stringify(newWindow, null, 2);
+    jsonResult.textContent = JSON.stringify(currentTimelineData, null, 2);
 }
 
-function stopRecording() {
-    // 1. Stop the microphone recording
-    if (typeof micStream !== 'undefined') {
-        micStream.getTracks().forEach(track => track.stop());
-    }
-    
-    // 2. Stop the audio processing environment
-    if (typeof audioContext !== 'undefined' && audioContext.state !== 'closed') {
-        audioContext.close();
-        statusText.innerText = "Stream closed.";
-    }
-    
-    // 3. Close the WebSocket connection to the server
-    if (ws.readyState === WebSocket.OPEN) {
-        ws.close();
-    }
-    
-}
+
 
 // --- MICROPHONE LOGIC ---
 /* micBtn.onclick = async () => {
