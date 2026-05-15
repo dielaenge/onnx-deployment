@@ -92,7 +92,7 @@ resource "aws_cloudfront_distribution" "bape_phase6_frontend_s3_distribution" {
   ordered_cache_behavior {
     path_pattern    = "/ws"
     allowed_methods = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods  = []
+    cached_methods  = ["GET", "HEAD"]
     cache_policy_id = data.aws_cloudfront_cache_policy.caching_disabled.id
     #AllViewer origin request policy
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id
