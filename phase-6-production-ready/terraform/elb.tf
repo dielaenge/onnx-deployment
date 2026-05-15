@@ -42,6 +42,8 @@ resource "aws_lb" "bape_alb" {
 
   enable_deletion_protection = false
 
+  idle_timeout = 3600
+
   tags = {
     Name  = "bape-alb"
     Phase = "phase-6-prod"
