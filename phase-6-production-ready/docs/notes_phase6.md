@@ -213,4 +213,83 @@ I must make sure to memorize…
 
 ---
 
-May 5 -12 implementing real-time functionality by editing index.html (mostly JavaScript) add commit!!
+Implementing real-time functionality by editing 
+
+- index.html:
+  - initialize audio context and worklet node
+  - connect worklet node to micStream
+  - listen for messages from worklet node and send them to backend via websocket connection
+  
+    *Commits*: 
+    - *3b415a22346ddc93a248f2be9789835b1a64ee42*
+
+
+- main.py
+  - implementing asynccontextmanager to load ML model and preprocessor only once
+  - implement stateful buffer to concatenate incoming audio chunks and run inference when 4 seconds of input are available
+ 
+    *Commits:*
+    - *51b65152445c2a1381fdb0d4854b73c7b1ee9149*
+    - *9ce3332df5d55691edeee0799af43e3cbff50ac1*
+
+
+## Back to Terraform
+
+After spending most of the phase rebuilding system architecture in Python and JavaScript, I'm getting back to the cloud engineering and deployment side.
+By doing so the UX benfits from not using a queue, a background worker and a database, but instead using the users browser to take over part of the payload and delivering results in near real-time.
+
+As I am not using SQS and thus not building a worker, the changes in Terraform are few:
+
+The container definition in `ecs.tf` needs to change the new container image containing the real-time streaming code.
+Also, a streaming session must stick to a specific container or otherwise input chunks will be sent to different containers and the state machine will break.
+
+
+The ALB `idle_timeout` is not set and will therefor default to `60`. Thus the process will break after this, so I will explicitly set it to `3600`, 60 minutes.
+
+### Stickiness
+Researching the stickiness of sessions I found that there is stickiness for `aws_lb_target_group` but also `aws_lb_listener` and was wondering about the difference. This [same question was asked before on StackOverflow](https://stackoverflow.com/questions/72576527/stickiness-in-elb-listener-vs-elb-target-group) , which received a great answer:
+
+> So to summarize, the aws_lb_listener setting is a separate stickiness setting that only applies to weighted target groups, and "sticks" the traffic to a specific target group, not individual targets. The aws_lb_target_group stickiness setting "sticks" the traffic to an individual target.
+
+> Unless you are using multiple weighted target groups, you will want to always use the aws_lb_target_group setting for session stickiness. If you are using weighted target groups and also need sticky sessions then you would enable it in both places. If you don't normally need sticky sessions, but you do want to "stick" to a specific target group for some reason, like in a blue-green deployment scenario, then you would only enable it at the listener level.
+
+So it became clear that I would set the stickiness on the target group of which I have only one, question is if `app_cookie` or `lb_cookie`, as these are the two options for application load balancers.
+I'm not entirely sure, but from what I could pick up, the `app_cookie` is specifically bound to an app's lifecycle, which would make sense in my case, as our app runs as long as the websocket connection is open.
+
+FINDING: What I researched related to REST APIs and standard HTTP connections, where usually a connection is created, some message is sent and the connectio is closed.  
+So, HTTP is a stateless protocol and works in a request-response mechanism. On every HTTP request, a TCP connection is established with the server over the socket. 
+For multiple turns of exchange, a client won't be reidentified by the server during multiple turns of exchange. Cookies and session stickiness solve this.
+
+On the other hand, and as I saw during websocket implementation, the websocket protocol opens a persistent TCP connection and only closes it at the end of a user session. Stickiness is baked in.
+
+The described differences between the HTTP/S and WS/S protocol (Layer 7 in the OSI model) make clear how they relate differently to TCP on Layer 4.
+
+Relevant readings:
+- [REST vs Websockets](https://www.baeldung.com/rest-vs-websockets)
+- [AWS Compute Blog: Using WebSockets and Load Balancers](https://aws.amazon.com/de/blogs/compute/using-websockets-and-load-balancers-part-two/)
+- [GeeksforGeeks: How to Use WebSocket and Load Balancers?](https://www.geeksforgeeks.org/system-design/how-to-use-websocket-and-load-balancers/)
+
+Perspective readings
+- [WebSockets at Scale: Architecture for millions of connections](https://websocket.org/guides/websockets-at-scale/)
+- [The Design Principles of Intelligent Load Balancing for Scalable WebSocket Services Used with Grid Computing](https://pdf.sciencedirectassets.com/280203/1-s2.0-S1877050919X0006X/1-s2.0-S1877050919303576/main.pdf)
+
+
+Moving forward, I understand that, once a websocket connection is established, the pipe is fixed and doesn't need cookies or further stickiness configuration. So how do I establish a WS connection?
+
+The Headers: When a browser tries to open a WebSocket, it sends standard HTTP requests with two very specific Headers that tell the server to switch to a WebSocket. What are the names of those two headers?
+A websocket connection is opened just like a usual HTTP connection but comes with two distinct headers `CONNECTION: UPGRADE` and `UPGRADE: WEBSOCKET`. These set the stage for a persistent websocket connection.
+By default, CloudFront strips those headers out before sending the request to the ALB. From the [AWS docs](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/distribution-working-with.websockets.html#distribution-working-with.websockets.recomended-settings) I learned that I either have to attach the AllViewer origin request policy or forward specific request headers and I chose to use the former, so now, my ordered cache behavior, the one defining the distribution to ALB connection, uses `origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"`.
+
+In phase 5 our distribution was set up to cache `GET` and `HEAD` methods, but as we now will get real-time results on an ongoing basis I disabled caching entirely by also [using a managed cache poolicy id (`CachingDisabled`)](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/using-managed-cache-policies.html#managed-cache-policy-caching-disabled), more specificall by setting `cache_policy_id = 4135ea2d-6df8-44a3-9df3-4b5a84be39ad`.
+
+Using these policy IDs saves me from writing my own caching policies but the numbers will become cryptic as soon as I move on, so I tried to find a more elegant way by using data sources with the human readable names of the policies and then referencing them in the origin distribution, like `origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id`.
+
+
+--
+review call with Philipp
+
+- spectrogram is input for onnx model, so we have the data for the spectrogram anyways and it should be okay, also from a computing perspective to plot the spectrogram in real-time as well
+
+- right now, inference is run every two seconds, would be nice to run it much more often, like every 0.01 seconds
+--
+
