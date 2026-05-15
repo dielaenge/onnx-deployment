@@ -75,7 +75,7 @@ resource "aws_iam_role_policy" "github_actions_permissions" {
           "ecr:CompleteLayerUpload",
           "ecr:PutImage"
         ]
-        Resource = aws_ecr_repository.bape-inference-tf.arn
+        Resource = aws_ecr_repository.bape-phase6-inference.arn
       },
       {
         # Permission to force a new deployment in ECS
