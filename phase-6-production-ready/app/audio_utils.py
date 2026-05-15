@@ -18,7 +18,7 @@ logging.basicConfig(
     level=logging.INFO,
     format= '%(asctime)s - %(name)s %(levelname)s - %(message)s'
 )
-logger = logging.getLogger("AUDIO_UTILS")
+logger = logging.getLogger(__name__)
 
 TARGET_SR = 16000 # target sample rate – placeholder value but a common one
 
@@ -70,43 +70,3 @@ class MelSpectrogram:
                 spec = spec[:, : self.trunc]
 
         return spec
-    
-# --- Create an instance of the MelSpectogram class ---
-    
-melspec_preprocessor = MelSpectrogram(
-    sr=16000, 
-    n_fft=64, 
-    hop_size=32, 
-    n_mels=16, 
-    fmin=20, 
-    fmax=8000, 
-    power=2.0, 
-    log_mag=True
-    )
-
-# deleted `def slice_spectrogram()` as the real-time processing via websocket follows a different logic
-
-# also delete preprocess_audio()
-
-def preprocess_audio(audio_bytes: bytes): #in phase 3 this was a path but after adding the normalization function it expects raw audio bytes
-    """Preprocesses audio and returns normalized wav, spectrogram as array and png."""
-
-    try:
-        #generate one full spectrogram (tensor)
-        raw_spectrogram = melspec_preprocessor(audio_bytes)
-
-        # calculate mean and standard
-        mean = raw_spectrogram.mean()
-        std = raw_spectrogram.std()
-
-        # standardize raw spectrogram tensor
-        standardized_spectrogram = (raw_spectrogram - mean) / (std + 1e-12)
-
-        # TBD: add timestamps to real-time chunks!!
-        
-        # Return standardized melspectrogram
-        return standardized_spectrogram
-    
-    except Exception as e:
-        logging.error(f"Spectrogram generation failed: {e}")
-        raise e
