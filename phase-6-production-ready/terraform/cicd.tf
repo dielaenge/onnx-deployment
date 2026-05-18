@@ -49,8 +49,8 @@ resource "aws_iam_role_policy" "github_actions_permissions" {
           "s3:ListBucket"
         ]
         Resource = [
-          aws_s3_bucket.bape_app_data_phase6.arn,       # Allows listing the bucket
-          "${aws_s3_bucket.bape_app_data_phase6.arn}/*" # Allows downloading the files inside
+          "arn:aws:s3:::bape-app-data-phase6-davidg",       # Allows listing the bucket
+          "arn:aws:s3:::bape-app-data-phase6-davidg/*" # Allows downloading the files inside
         ]
       },
       {
@@ -75,7 +75,7 @@ resource "aws_iam_role_policy" "github_actions_permissions" {
           "ecr:CompleteLayerUpload",
           "ecr:PutImage"
         ]
-        Resource = aws_ecr_repository.bape-phase6-inference.arn
+        Resource = "arn:aws:ecs:eu-central-1:*:service/bape_cluster/bape_ecs_service"
       },
       {
         # Permission to force a new deployment in ECS
