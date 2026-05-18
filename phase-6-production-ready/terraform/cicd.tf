@@ -49,8 +49,8 @@ resource "aws_iam_role_policy" "github_actions_permissions" {
           "s3:ListBucket"
         ]
         Resource = [
-          "arn:aws:s3:::bape-app-data-phase6-davidg",       # Allows listing the bucket
-          "arn:aws:s3:::bape-app-data-phase6-davidg/*" # Allows downloading the files inside
+          "arn:aws:s3:::bape-app-data-phase6-davidg",  # Allows listing the bucket / addressed explicitly to avoid dependency applies when running target applies
+          "arn:aws:s3:::bape-app-data-phase6-davidg/*" # Allows downloading the files inside addressed explicitly to avoid dependency applies when running target applies
         ]
       },
       {
@@ -75,7 +75,7 @@ resource "aws_iam_role_policy" "github_actions_permissions" {
           "ecr:CompleteLayerUpload",
           "ecr:PutImage"
         ]
-        Resource = "arn:aws:ecs:eu-central-1:*:service/bape_cluster/bape_ecs_service"
+        Resource = "arn:aws:ecr:eu-central-1:*:repository/bape-phase6-inference" #addressed explicitly to avoid dependency applies when running target applies
       },
       {
         # Permission to force a new deployment in ECS
@@ -84,7 +84,7 @@ resource "aws_iam_role_policy" "github_actions_permissions" {
           "ecs:UpdateService",
           "ecs:DescribeServices"
         ]
-        Resource = aws_ecs_service.bape_service.id
+        Resource = "arn:aws:ecs:eu-central-1:*:service/bape_cluster/bape_ecs_service" #addressed explicitly to avoid dependency applies when running target applies
       }
     ]
   })
