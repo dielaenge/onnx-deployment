@@ -9,7 +9,6 @@ resource "aws_security_group" "bape_alb_sg" {
 
   tags = {
     Name  = "bape_alb_sg"
-    Phase = "phase-6-prod"
   }
 }
 
@@ -20,6 +19,10 @@ resource "aws_vpc_security_group_ingress_rule" "bape_alb_sg_ingress" {
   from_port         = 80
   ip_protocol       = "tcp"
   to_port           = 80
+
+  tags = {
+    Name  = "bape_alb_sg_ingress"
+  }
 }
 
 # egress: outgoing traffic to Fargate Container Security Group allowed / Port 8080 is the only exposed port by container
@@ -30,6 +33,10 @@ resource "aws_vpc_security_group_egress_rule" "bape_alb_sg_egress" {
   from_port                    = 8080
   ip_protocol                  = "tcp"
   to_port                      = 8080
+
+  tags = {
+    Name  = "bape_alb_sg_egress"
+  }
 }
 
 # APPLICATION LOAD BALANCER
@@ -46,7 +53,6 @@ resource "aws_lb" "bape_alb" {
 
   tags = {
     Name  = "bape-alb"
-    Phase = "phase-6-prod"
   }
 }
 
@@ -72,7 +78,6 @@ resource "aws_lb_target_group" "bape_alb_tg" {
 
   tags = {
     Name  = "bape-alb-tg"
-    Phase = "phase-6-prod"
   }
 }
 
@@ -85,5 +90,9 @@ resource "aws_lb_listener" "bape_alb_listener" {
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.bape_alb_tg.arn
+  }
+
+  tags = {
+    Name  = "bape-alb-listener"
   }
 }

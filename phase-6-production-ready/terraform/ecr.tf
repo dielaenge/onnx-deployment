@@ -9,4 +9,8 @@ resource "aws_ecr_repository" "bape-phase6-inference" {
   image_scanning_configuration {
     scan_on_push = true
   }
+
+  tags = {
+    Name = "ECR-Repo_phase6"
+  }
 }

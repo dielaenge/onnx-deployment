@@ -2,7 +2,7 @@ resource "aws_s3_bucket" "bape_phase6_frontend" {
   bucket = "bape-phase6-frontend-davidg"
 
   tags = {
-    Name = "bape_phase6_frontend_bucket"
+    Name = "frontend_bucket"
   }
 }
 
@@ -113,4 +113,8 @@ resource "aws_cloudfront_distribution" "bape_phase6_frontend_s3_distribution" {
   }
 
   default_root_object = "index.html"
+
+  tags = {
+    Name = "CFDistribution"
+  }
 }

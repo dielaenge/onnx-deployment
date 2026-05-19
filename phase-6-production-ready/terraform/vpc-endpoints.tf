@@ -9,7 +9,6 @@ resource "aws_vpc_endpoint" "s3-gateway" {
 
   tags = {
     Name  = "bape-vpc-s3-gw"
-    Phase = "phase-6-prod"
   }
 }
 
@@ -24,7 +23,6 @@ resource "aws_vpc_endpoint" "ecr-api-interface" {
 
   tags = {
     Name  = "bape-vpc-ecr-api-interface"
-    Phase = "phase-6-prod"
   }
 }
 
@@ -39,7 +37,6 @@ resource "aws_vpc_endpoint" "ecr-dkr-interface" {
 
   tags = {
     Name  = "bape-vpc-ecr-dkr-interface"
-    Phase = "phase-6-prod"
   }
 }
 
@@ -54,7 +51,6 @@ resource "aws_vpc_endpoint" "cloudwatch-logs-interface" {
 
   tags = {
     Name  = "bape-vpc-cw-logs-interface"
-    Phase = "phase-6-prod"
   }
 }
 # CloudWatch Log Group
@@ -64,6 +60,5 @@ resource "aws_cloudwatch_log_group" "log_group_ecs_bape_inference" {
 
   tags = {
     Name  = "log_group_ecs_bape_inference"
-    Phase = "phase-6-prod"
   }
 }

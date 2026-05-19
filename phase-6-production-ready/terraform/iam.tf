@@ -20,7 +20,6 @@ resource "aws_iam_role" "ecs_task_execution_role" {
   )
   tags = {
     Name  = "bape_ecs_task_execution_role"
-    Phase = "phase-6-prod"
   }
 }
 
@@ -46,6 +45,9 @@ resource "aws_iam_role" "ecs_task_role" {
       }]
     }
   )
+  tags = {
+    Name  = "bape-task-role"
+  }
 }
 
 # KEYS FOR TASK ROLE (USING _ROLE_POLICY FOR CUSTOM POLICY)

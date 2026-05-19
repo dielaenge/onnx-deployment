@@ -9,7 +9,6 @@ resource "aws_security_group" "vpc_endpoint_sg" {
 
   tags = {
     Name  = "vpc_endpoint_sg"
-    Phase = "phase-6-prod"
   }
 }
 # ingress rule: allow incoming HTTPS traffic from Fargate Container Security Group
@@ -19,6 +18,10 @@ resource "aws_vpc_security_group_ingress_rule" "vpc_endpoint_ingress" {
   from_port                    = 443
   ip_protocol                  = "tcp"
   to_port                      = 443
+
+  tags = {
+    Name  = "vpc_endpoint_sg_ingress"
+  }
 }
 # NO EGRESS rule because *END*points are servers; they don't initiate connections
 
@@ -30,7 +33,6 @@ resource "aws_security_group" "ecs_fargate_containers_sg" {
 
   tags = {
     Name  = "ecs_fargate_containers_sg"
-    Phase = "phase-6-prod"
   }
 }
 # ingress: allow incoming traffic from ALB Security Group on port 8080 (defined in dockerfile)
@@ -41,6 +43,10 @@ resource "aws_vpc_security_group_ingress_rule" "ecs_fargate_ingress" {
   from_port                    = 8080
   ip_protocol                  = "tcp"
   to_port                      = 8080
+
+  tags = {
+    Name  = "ecs_fargate_sg_ingress"
+  }
 }
 # egress: allow outgoing traffic to the vpc endpoints
 resource "aws_vpc_security_group_egress_rule" "ecs_fargate_egress" {
@@ -50,6 +56,10 @@ resource "aws_vpc_security_group_egress_rule" "ecs_fargate_egress" {
   from_port                    = 443
   ip_protocol                  = "tcp"
   to_port                      = 443
+
+  tags = {
+    Name  = "ecs_fargate_sg_egress"
+  }
 }
 # egress: allow traffic to S3 Gateway
 # since S3 doesn't have an SG, I use a Prefix List
@@ -64,4 +74,8 @@ resource "aws_vpc_security_group_egress_rule" "ecs_fargate_s3_egress" {
   from_port      = 443
   ip_protocol    = "tcp"
   to_port        = 443
+
+  tags = {
+    Name  = "ecs_fargate_s3_sg_egress"
+  }
 }

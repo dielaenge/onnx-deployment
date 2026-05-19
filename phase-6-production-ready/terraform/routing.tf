@@ -12,7 +12,6 @@ resource "aws_route_table" "all-traffic-to-igw" {
 
   tags = {
     Name  = "bape-vpc-route-table"
-    Phase = "phase-6-prod"
   }
 }
 
@@ -29,6 +28,10 @@ resource "aws_route_table_association" "pub-sn-b-assoc" {
 # Route Table for Private Subnets: ??
 resource "aws_route_table" "private-traffic" {
   vpc_id = aws_vpc.bape-vpc.id
+
+  tags = {
+    Name  = "bape-private-traffic-route-table"
+  }
 }
 # associate `private-traffic` with private subnets
 resource "aws_route_table_association" "prv-sn-a-assoc" {

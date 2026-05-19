@@ -55,6 +55,10 @@ resource "aws_ecs_cluster" "bape_cluster" {
     name  = "containerInsights"
     value = "enhanced"
   }
+
+  tags = {
+    Name = "bape_cluster"
+  }
 }
 
 # ECS Service
@@ -76,4 +80,9 @@ resource "aws_ecs_service" "bape_service" {
     container_name   = "bape-container"
     container_port   = 8080
   }
+
+    tags = {
+    Name = "bape_ecs_service"
+  }
+
 }

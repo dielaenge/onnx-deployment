@@ -12,4 +12,8 @@ data "aws_availability_zones" "available" {
 # -------------------------------
 resource "aws_s3_bucket" "bape_app_data_phase6" {
   bucket = "bape-app-data-phase6-davidg"
+
+  tags = {
+    Name        = "bape_app_data_phase6"
+  }
 }
