@@ -4,7 +4,7 @@ output "bape-inference-tf-repository_url" {
   value       = aws_ecr_repository.bape-phase6-inference.repository_url
 }
 
-output "cloudfront_phase5_url" {
+output "cloudfront_phase6_url" {
   description = "Edge distribution URL serving the BAPE frontend."
   value       = aws_cloudfront_distribution.bape_phase6_frontend_s3_distribution.domain_name
 }

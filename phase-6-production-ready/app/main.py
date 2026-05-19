@@ -144,6 +144,10 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         logger.exception("Error in Websocket: %s", e)
 
-# LAUNCH
+# LAUNCH ON LOCALHOST
+# if __name__ == "__main__":
+#    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
+
+# LAUNCH ON AWS - defined port 8080 in ecs.tf
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8080)

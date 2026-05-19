@@ -219,7 +219,21 @@ const jsonResult = document.getElementById('json-result');
 const resultArea = document.getElementById('result-area');
 
 // Web Audio API
-let ws = new WebSocket("wss://localhost:8000/ws")
+
+// Get the current hostname (to solve switching between local and cloud deployment)
+const host = window.location.host;
+
+// Find out the protocol
+// …if on HTTPS/CloudFront, WSS is required
+// …or else (on HTTP/local), WS is required
+const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+
+// Construct the URL
+const wsUrl = `${protocol}${host}/ws`;
+
+console.log("Connecting to WebSocket at:", wsUrl);
+const ws = new WebSocket(wsUrl);
+
 let audioContext;
 let micStream;
 
