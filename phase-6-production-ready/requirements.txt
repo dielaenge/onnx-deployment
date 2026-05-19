@@ -11,7 +11,9 @@ annotated-doc==0.0.4
 annotated-types==0.7.0
     # via pydantic
 anyio==4.13.0
-    # via starlette
+    # via
+    #   starlette
+    #   watchfiles
 audioread==3.1.0
     # via librosa
 boto3==1.42.85
@@ -43,6 +45,8 @@ flatbuffers==25.12.19
 fonttools==4.62.1
     # via matplotlib
 h11==0.16.0
+    # via uvicorn
+httptools==0.7.1
     # via uvicorn
 humanfriendly==10.0
     # via
@@ -118,10 +122,14 @@ python-dateutil==2.9.0.post0
     # via
     #   botocore
     #   matplotlib
+python-dotenv==1.2.2
+    # via uvicorn
 python-multipart==0.0.21
     # via -r requirements.in
 pyyaml==6.0.3
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   uvicorn
 requests==2.33.1
     # via pooch
 s3transfer==0.16.0
@@ -166,5 +174,11 @@ urllib3==2.6.3
     # via
     #   botocore
     #   requests
-uvicorn==0.40.0
+uvicorn[standard]==0.40.0
     # via -r requirements.in
+uvloop==0.22.1
+    # via uvicorn
+watchfiles==1.2.0
+    # via uvicorn
+websockets==16.0
+    # via uvicorn
