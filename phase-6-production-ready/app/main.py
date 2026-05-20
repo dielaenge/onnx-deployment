@@ -1,16 +1,23 @@
+from .inference_engine import AcousticModelProcessor
+from .audio_utils import MelSpectrogram
+
 from fastapi import FastAPI, WebSocket, Request
 from fastapi.responses import FileResponse
 import uvicorn
+
+import numpy as np
+
+import json
 import logging
 from pathlib import Path
-import numpy as np
+
 from contextlib import asynccontextmanager
+
+import uuid
+import time
 
 # Identify Base Directory
 BASE_DIR = Path(__file__).resolve().parent
-
-from .inference_engine import AcousticModelProcessor
-from .audio_utils import MelSpectrogram
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -102,7 +109,11 @@ async def websocket_endpoint(websocket: WebSocket):
 
             #check if buffer has enough data for 4 seconds (required by onnx model)
             if len(audio_buffer) >= 64000:
-                logger.info("4 second window available. Ready to run inference.")
+                
+                # Initialize inference loop
+                session_id = str(uuid.uuid4())
+                logger.info("%s samples available.", len(audio_buffer))
+                logger.info("session_id: %s", session_id)
                 spectrogram_chunk = melspec_preprocessor(audio_buffer)
 
                 # calculate mean and standard
@@ -118,14 +129,25 @@ async def websocket_endpoint(websocket: WebSocket):
                 # reshape to 4D tensor
                 standardized_spectrogram_4d = np.expand_dims(standardized_spectrogram_nparray, axis=(0,1))
 
-
                 # run inference
-                logger.info("Running inference on shape: %s", standardized_spectrogram_4d.shape)
+                start_time = time.perf_counter()
                 results = processor.run_inference(standardized_spectrogram_4d)
+                end_time = time.perf_counter()
+                inference_time_ms = ((end_time - start_time)*1000, 2)
+                
+                # Log session data
+                log_data = {
+                    "event": "inference_complete",
+                    "session_id": session_id,
+                    "inference_time_ms": inference_time_ms,
+                    "shape": standardized_spectrogram_4d.shape,
+                    "t60_estimate_1khz_sample": results["params"].tolist()[0][0][3]
+                }
 
+                logger.info(json.dumps(log_data))
 
                 # onnx model returns a list of 3 np arrays, which need to be converted to standard python lists so we can send them as a JSON
-                response_payload = {
+                response_json = {
                     "latents": results["latents"].tolist(),
                     "params": results["params"].tolist(),
                     "quantiles": results["quantiles"].tolist()
@@ -133,10 +155,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 # Print the shape to confirm, and just the first 3 parameter estimates 
                 logger.info("Inference results for last 4 seconds received.")
-                logger.info("First three T60 Params: %s", response_payload['params'][0][0][:3])
+                logger.info("First three T60 Params: %s", response_json['params'][0][0][:3])
 
                 # send results
-                await websocket.send_json(response_payload)
+                await websocket.send_json(response_json)
 
                 # slice buffer to keep the latter half of the window (2 seconds; which will be concatenated with new input if available)
                 audio_buffer = audio_buffer[-32000:]
