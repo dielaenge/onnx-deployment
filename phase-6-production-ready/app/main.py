@@ -133,7 +133,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 start_time = time.perf_counter()
                 results = processor.run_inference(standardized_spectrogram_4d)
                 end_time = time.perf_counter()
-                inference_time_ms = ((end_time - start_time)*1000, 2)
+                inference_time_ms = round((end_time - start_time)*1000, 2)
 
                 # onnx model returns a list of 3 np arrays, which need to be converted to standard python lists so we can send them as a JSON
                 response_json = {
