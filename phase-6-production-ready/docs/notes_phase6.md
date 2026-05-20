@@ -293,3 +293,95 @@ review call with Philipp
 - right now, inference is run every two seconds, would be nice to run it much more often, like every 0.01 seconds
 --
 
+***Running the updated terraform code***
+
+- ususally I had to target apply the ECR repo first and push the updated image manually before running the entire apply command
+
+- building on phase 5 where we ended with a GitHub CI/CD Action, I would only need to build the repo but needed to edit `/.github/workflows/deploy.yml`
+  - I separated it to `deploy-phase5.yml` and `deploy-phase6.yml`, edited branches, environment variables and working directories accordingly
+  - ran the updated deploy-phase6 workflow on the feat/production-ready branch but failed because of a missing iam_openid_connect_provider and IAM role for the GitHub Action
+    - had also to be target applied first:
+    `terraform apply -target=aws_iam_openid_connect_provider.github_oidc -target=aws_iam_role.github_actions_role`
+  - the next GitHUb Action run failed as well but this time during the workflow:
+
+    From the GH Actions Log:
+    ```
+    > Run echo "Downloading ONNX model artifacts from S3..."
+    > Downloading ONNX model artifacts from S3...
+    > fatal error: An error occurred (AccessDenied) when calling the ListObjectsV2 operation: User: arn:aws:sts::609662023678:assumed-role/github_actions_bape_cd/GitHubActions is not authorized to perform: s3:ListBucket on resource: "arn:aws:s3:::bape-app-data-phase5-davidg" because no identity-based policy allows the s3:ListBucket action
+    > Error: Process completed with exit code 1.
+    ```
+    ![Error whiledownloading model from S3](screenshots/deploy-workflow_error.png)
+
+  - so my `deploy-phase6.yml` was still pointing to the phase5 app bucket, for which the github action IAM role had no permissions -> corrected to phase6
+
+  - after taking a break and destroying everything I came back and started with the targeted applies first: `terraform apply -target=aws_iam_openid_connect_provider.github_oidc -target=aws_iam_role.github_actions_role -target=aws_ecr_repository.bape-phase6-inference` and then `tf apply` which looked good before confirming, although it said it would destroy the phase5 frontend and app buckets, which will fail because they are not empty
+    - this error was caused because the s3 backend key in `backend.tf`'s of phase 5 and 6 were still pointing to the same `.tfstate` file
+      - separated keys to `"bape/phase6/terraform.tfstate"` and `"bape/phase6/terraform.tfstate"`
+      - initialized terraform again for phase 6 with `tf init -reconfigure`
+      - ran `tf destroy` then target applied the pre-required resources
+        - ran into errors because dependencies were missing -> needed to augment target applies
+      - when GitHub Action failed on ECS commands but succeeded on ECR commands, I knew the repo was available and the entire `apply` command could be run, which then would also enable the complete GitHub Action
+      - `tf apply` produced errors for already existing resources which must have been created before the reinitialization of terraform, so I needed to delete the flagged resources
+      
+      (end of day – for tomorrow: 
+        - be precise in which resources must be available for the repo to be available
+          - the github OIDC provider
+          - the GitHub Actions IAM role
+          - the bape-phase6-inference ECR repo and
+          - the IAM role policy for the github actions permissions
+        
+        - target applies are not acceptable in production - MUST BE SOLVED
+        
+        - not all resources are properly tagged in terraform!!
+          - [implemented `default_tags`](https://developer.hashicorp.com/terraform/tutorials/aws/aws-default-tags?in=terraform%2Faws)
+        
+        - use data sources where possible and suitable
+      )
+
+May 19
+
+started the day by implementing default_tags and give individual resources a specific name tag to keep things clean. Then I ran the targeted apply for
+- the github OIDC provider
+- the GitHub Actions IAM role
+- the bape-phase6-inference ECR repo and
+- the IAM role policy for the github actions permissions
+
+Then I ran my `Build and Deploy - phase 6` workflow (which ran fine, just not updateing the ECS service) and then ran the entire `terraform apply` which also went fine.
+I uploaded the model files to the app-data bucket and the `processor.js` and `index.html` to the frontend bucket. 
+Everything looks good, but I don't know how to properly edit the websocket url, which is still: 
+
+```
+let ws = new WebSocket("wss://localhost:8000/ws")
+```
+
+Edited the JavaScript to determine the hostname and the protocol and then build the websockjet URL.
+
+ANother run still failed as ECS and local ports differed.
+
+The next run showed a successful application launch in my CloudWacth logs but told me 
+
+```
+2026-05-19T12:02:43.196Z
+WARNING:  Unsupported upgrade request.
+
+WARNING: Unsupported upgrade request.
+2026-05-19T12:02:43.196Z
+WARNING:  No supported WebSocket library detected. Please use "pip install 'uvicorn[standard]'", or install 'websockets' or 'wsproto' manually.
+
+WARNING: No supported WebSocket library detected. Please use "pip install 'uvicorn[standard]'", or install 'websockets' or 'wsproto' manually.
+2026-05-19T12:02:43.197Z
+INFO:     10.0.2.159:19164 - "GET /ws HTTP/1.1" 404 Not Found
+
+INFO: 10.0.2.159:19164 - "GET /ws HTTP/1.1" 404 Not Found
+2026-05-19T12:02:45.137Z
+WARNING:  Unsupported upgrade request.
+```
+
+In my requirements.txt I was using uvicorn, which only speaks standard HTTP and can't upgrade a HTTP connection to a WebSocket, for this I needed to update it to uvicorn[standard] and then run my CICD pipeline again before telling ECS to pull the new image with
+```
+aws ecs update-service --cluster bape_cluster --service bape_ecs_service --force-new-deployment
+```
+the new deployment works as intended.
+
+[TODO: safe succesful cloudwatch logs]
