@@ -134,17 +134,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 results = processor.run_inference(standardized_spectrogram_4d)
                 end_time = time.perf_counter()
                 inference_time_ms = ((end_time - start_time)*1000, 2)
-                
-                # Log session data
-                log_data = {
-                    "event": "inference_complete",
-                    "session_id": session_id,
-                    "inference_time_ms": inference_time_ms,
-                    "shape": standardized_spectrogram_4d.shape,
-                    "t60_estimate_1khz_sample": results["params"].tolist()[0][0][3]
-                }
-
-                logger.info(json.dumps(log_data))
 
                 # onnx model returns a list of 3 np arrays, which need to be converted to standard python lists so we can send them as a JSON
                 response_json = {
@@ -152,10 +141,17 @@ async def websocket_endpoint(websocket: WebSocket):
                     "params": results["params"].tolist(),
                     "quantiles": results["quantiles"].tolist()
                 }
+                
+                # Log session data
+                log_data = {
+                    "event": "inference_complete",
+                    "session_id": session_id,
+                    "inference_time_ms": inference_time_ms,
+                    "shape": standardized_spectrogram_4d.shape,
+                    "t60_estimate_1khz_sample": results["params"].tolist()[0][0]
+                }
 
-                # Print the shape to confirm, and just the first 3 parameter estimates 
-                logger.info("Inference results for last 4 seconds received.")
-                logger.info("First three T60 Params: %s", response_json['params'][0][0][:3])
+                logger.info(json.dumps(log_data))
 
                 # send results
                 await websocket.send_json(response_json)
@@ -167,7 +163,7 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.exception("Error in Websocket: %s", e)
 
 # LAUNCH ON LOCALHOST
-# if __name__ == "__main__":
+#if __name__ == "__main__":
 #    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
 
 # LAUNCH ON AWS - defined port 8080 in ecs.tf
