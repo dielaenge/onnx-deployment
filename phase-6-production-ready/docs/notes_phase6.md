@@ -385,3 +385,76 @@ aws ecs update-service --cluster bape_cluster --service bape_ecs_service --force
 the new deployment works as intended.
 
 [TODO: safe succesful cloudwatch logs]
+
+## Recap of Phase 6
+
+- substituted REST API with stateful, low-latency WebSocket connection.
+- eliminated disk I/O on server side by streaming raw binary floats directly from the browser's audio hardware (convertion via Web Audio API)
+- visualized real-time inference stream via D3.js
+- right-sized Fargate task and deployed it securely behind an Application Load Balancer and CloudFront CDN.
+- implemented Structured JSON Logging for MLOps observability
+
+### check-in w Philipp (May20)
+- Problem: t60 / D3.js visualisation gets crammed
+  - solution - fixed observation window:
+    - start vizualisation as is (in 64kHz chunks)
+    - when available results >= 10 seconds (160kHz) 
+      => cut off to the left
+    - when recording is stopped
+      => produce entire vizualization
+
+- problem: stride is too long
+- solution 
+  - already measured current AMI performance
+  CloudWatch Logs:
+  2026-05-20 16:52:24,441 - app.main INFO - {
+    "event": "inference_complete",
+    "session_id": "18163eb3-4161-4b43-95ec-c02115fecbfd",
+    "inference_time_ms": [
+        53.686239000001024,
+        2
+    ],
+    "shape": [
+        1,
+        1,
+        16,
+        2000
+    ],
+    "t60_estimate_1khz_sample": [
+        0.1171250194311142,
+        0.21586409211158752,
+        0.8185502886772156
+    ]
+  }
+  
+  - => model takes ~60ms to process a 4s (4000ms) chunk
+    - increase stride from 2s to 0,2seconds (200ms)
+
+- BAPE project uses same model architecture with different pth-weights for estimating c50 values (clarity index), which are required in the output - this is not touched in any way yet
+  - export another onnx file to run inference for estimating c50 values
+  - DECISION: allow users to switch models OR run inference on both models simultaneously?
+    - depends on UX benefit vs cost premium and/or increased load
+
+- spectrogram is missing
+  - would be best to also have it in real-time in a fixed observation window, just like t60 / D3.js visualisation (fixed window in real-time; entire spectrogram after recording end)
+  - spectrogram should not add too much load as the model requires spectrogram data for inference – it is just not visualized
+
+### Cloud engineering tickets
+- probelm - model is loaded with each container which is spun up
+  - inefficient and should be loaded once and distributed via a shared file system (EFS?) or MO model serving tool
+
+- problem: in previous deployments, which processed only entire recordings, preprocessed spectrogram and audio where available, now lacking
+  - hurts user experience to not see spectrogram and be able to replay input
+  - stripped from app to reduce payload during real-time inference
+  - solution: distribute spectrogram visualization and audio playback to microservices?
+
+- problem: terraform hardly portable as most resources use hardcoded definitions
+  - use data sources where possible (managed policies, AMIs, subnets)
+
+- decision: should results be stored in user accounts to increase privacy?
+  - no, least data retention = maximum privacy
+  - only process data in RAM and then discard
+
+- problem: no cost optimization at all
+  - everything has been engineered to run on on demand resources and no potentials to save on costs have been reflected
+  - when doing scaling tests, this should be considered beforehand!!
