@@ -1,25 +1,8 @@
 import sys
-import os
 from pathlib import Path
 from datetime import datetime
-
-import librosa
-import torch
-import torch.nn as nn
-import numpy as np
-from omegaconf import OmegaConf
-
 import argparse
 import logging
-
-from scripts.bape_local.src.util.signals import MelSpectrogram
-from scripts.bape_local.src.model.param_estimator import ParameterEstimator as OriginalEstimator
-
-from scripts.bape_local.src.model.speech_encoder import SpeechEncoder
-from scripts.bape_local.src.model.cnn2d import CNNEncoder
-from scripts.bape_local.src.model.seq import SequenceModel
-from scripts.bape_local.src.util.layers import SelfAttentionPooling
-from scripts.bape_local.src.model.mlp import RegressionHead
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -31,15 +14,32 @@ logger = logging.getLogger(__name__)
 # --- Path logic ---
 # Get directory of this script
 SCRIPT_DIR = Path(__file__).resolve().parent
-
 # Get project root director
 PROJECT_ROOT = SCRIPT_DIR.parent
-
 # Add the project root to the search path
 if PROJECT_ROOT not in sys.path:
     sys.path.append(str(PROJECT_ROOT))  
-logger.debug("Project root is: %s.\nScript running from %d.\n", PROJECT_ROOT, SCRIPT_DIR)
-logger.debug("Script running from %s.\n", SCRIPT_DIR)
+logger.debug("Project root is: %s. Script running from %d.", PROJECT_ROOT, SCRIPT_DIR)
+logger.debug("Script running from %s.", SCRIPT_DIR)
+
+# app-specific imports
+import librosa
+import torch
+import torch.nn as nn
+import numpy as np
+from omegaconf import OmegaConf
+
+# imports from local modules
+from scripts.bape_local.src.util.signals import MelSpectrogram
+from scripts.bape_local.src.model.param_estimator import ParameterEstimator as OriginalEstimator
+
+from scripts.bape_local.src.model.speech_encoder import SpeechEncoder
+from scripts.bape_local.src.model.cnn2d import CNNEncoder
+from scripts.bape_local.src.model.seq import SequenceModel
+from scripts.bape_local.src.util.layers import SelfAttentionPooling
+from scripts.bape_local.src.model.mlp import RegressionHead
+
+
 
 # Define all I/O paths (bape repository must be vendored to src/bape_local)
 T60_WEIGHTS_PATH = ( PROJECT_ROOT / "scripts" / "bape_local" / "weights" / "param" / "2025-11-18_17-40-57" / "model.pth" )
@@ -48,7 +48,7 @@ ENCODER_WEIGHTS_PATH = ( PROJECT_ROOT / "scripts" / "bape_local" / "weights" / "
 
 REF_AUDIO_PATH = ( PROJECT_ROOT / "src" / "wet_speech.wav" )
 
-timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+timestamp = datetime.now().strftime(f"%Y-%m-%d_%H-%M-%S")
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Export T60 or C50 BAPE models as ONNX.")
@@ -66,12 +66,12 @@ def main():
 # DEFINE FOR WHICH PARAM, THE MODEL EXPORT SHOULD HAPPEN
     if args.param == "T60":
         weights_path = T60_WEIGHTS_PATH
-        EXPORTED_ONNX_PATH = ( PROJECT_ROOT / "app" / "models" / "t60_bape_{timestamp}.onnx" )
+        EXPORTED_ONNX_PATH = ( PROJECT_ROOT / "app" / "models" / f"t60_bape_{timestamp}.onnx" )
         expected_reference = [0.4660, 0.5458, 0.8592]
         logger.info("Exporting ONNX model for T60 estimation to %s", EXPORTED_ONNX_PATH)
     elif args.param == "C50":
         weights_path = C50_WEIGHTS_PATH
-        EXPORTED_ONNX_PATH = ( PROJECT_ROOT / "app" / "models" / "c50_bape_{timestamp}.onnx" )
+        EXPORTED_ONNX_PATH = ( PROJECT_ROOT / "app" / "models" / f"c50_bape_{timestamp}.onnx" )
         expected_reference = None
 
     # I. Assembling the model, the architectural shell, from scratch
@@ -118,20 +118,19 @@ def main():
             self.encoder = SpeechEncoder(front_end=front_end, sequence_model=sequence_model)
             
             if encoder_state is not None:
-                logger.info("Loading Encoder weights from %s", encoder_state)
+                logger.info("Loading Encoder weights from %s\n\n", encoder_state)
                 
                 # Load the dictionary
                 state_dict = torch.load(encoder_state, map_location="cpu")
                 
-                logger.info("\n----WEIGHTS FILE KEY AUDIT ----")
+                logger.info("----WEIGHTS FILE KEY AUDIT ----")
                 for key in list(state_dict.keys())[:5]:
                     logger.info("File Key: %s", key)
-                logger.info("-------------------------------\n")
 
                 # Load state_dict into encoder submodule
                 # strict=False allows ignoring unexpected "error_model" and "quantile" keys
                 missing_keys, unexpected_keys = self.encoder.load_state_dict(state_dict, strict=False)
-                logger.info("\nKEY AUDIT RESULT: %s missing keys, %d unexpected keys.", len(missing_keys), len(unexpected_keys))
+                logger.info("KEY AUDIT RESULT: %s missing keys, %d unexpected keys.", len(missing_keys), len(unexpected_keys))
                 if missing_keys:
                     logger.info("MISSING FROM ENCODER: %s...\n", missing_keys[:3]) # Print first 3
             
@@ -194,9 +193,9 @@ def main():
             #differing from the OriginalEstimator / ParameterEstimator we return 'z' (latent / acoustic fingerlogger.info) AND 'outputs' (params)
             return z, output, quantiles_adjusted
         
-    logger.info("`SuperParameterEstimator` class defined.")
+    logger.info("`SuperParameterEstimator` class defined.\n\n")
 
-    logger.info("\nStep 2: Instantiating the `SuperParameterEstimator` class as `param_estimator_model`.")
+    logger.info("Step 2: Instantiating the `SuperParameterEstimator` class as `param_estimator_model`.")
 
     param_estimator_model = SuperParameterEstimator(
         encoder_state= ENCODER_WEIGHTS_PATH,
@@ -212,12 +211,12 @@ def main():
             "output_act": "relu"
             }
     )
-    logger.info("\nPyTorch model instantiated with speech_encoder state from %s as `param_estimator_model`.", weights_path)
+    logger.info("PyTorch model instantiated with speech_encoder state from %s as `param_estimator_model`.\n\n", weights_path)
 
 
     # III. Load weights into model
 
-    logger.info("\n\nStep 3: Loading pre-trained weights from %s", weights_path)
+    logger.info("Step 3: Loading pre-trained weights from %s", weights_path)
 
     # #load the weights file into a dict (as ONNX requires this)
     state_dict = torch.load(weights_path, map_location="cpu")
@@ -231,10 +230,10 @@ def main():
 
     #set the model to evaluation mode (≠training mode)
     param_estimator_model.eval()
-    logger.info("\nModel set to evaluation mode.")
+    logger.info("Model set to evaluation mode.\n\n")
 
     # II. Instantiate a MelSpectrogram object
-    logger.info("\n\nStep 4: Prepare input for onnx export.")
+    logger.info("Step 4: Prepare input for onnx export.")
     logger.info("Instantiating MelSpectrogram object as `preprocessor`…")
 
     preprocessor = MelSpectrogram(
@@ -249,18 +248,18 @@ def main():
     trunc= 2000
     )
 
-    logger.info("…done.\nLoading reference audio…")
+    logger.info("…done. Loading reference audio…")
 
     ref_audio, _ = librosa.load(REF_AUDIO_PATH, sr=16000)
-    logger.info("…done.\nReference audio loaded from %s with shape %d.\nTransforming to MelSpectrogram…", REF_AUDIO_PATH, ref_audio.shape)
+    logger.info("…done. Reference audio loaded from %s with shape %d. Transforming to MelSpectrogram…", REF_AUDIO_PATH, ref_audio.shape[0])
 
     preprocessed_2d_tensor = preprocessor(ref_audio)
-    logger.info("Transformed ref_audio to 2D Spectrogram with shape: %s.\nStandardizing…", preprocessed_2d_tensor.shape)
+    logger.info("Transformed ref_audio to 2D Spectrogram with shape: %s. Standardizing…", preprocessed_2d_tensor.shape)
     preprocessed_2d_tensor = (preprocessed_2d_tensor - preprocessed_2d_tensor.mean()) / (preprocessed_2d_tensor.std() + 1e-8)
-    logger.info("…done.\nAdding Dimensions…")
+    logger.info("…done. Adding Dimensions…")
 
     final_4d_tensor = preprocessed_2d_tensor.unsqueeze(0).unsqueeze(0)
-    logger.info("…done.\nInput ready for onnx export. Shape is %s and should be [Batch = 1, Channel = 1, Height = 16, Width= 2000].\nRunning unit test to verify…\n", final_4d_tensor.shape)
+    logger.info("…done. Input ready for onnx export. Shape is %s and should be [Batch = 1, Channel = 1, Height = 16, Width= 2000]. Running unit test to verify…\n", final_4d_tensor.shape)
 
     # --- THE SELF-TEST ---
     with torch.no_grad():
@@ -270,7 +269,7 @@ def main():
         should_export = False
 
         if expected_reference is not None:
-            logger.info("\n--- UNIT TEST FOR T60 MODEL: COMPARING INFERENCE RESULTS OF PYTORCH MODEL AGAINST REFERENCE RESULTS---")
+            logger.info("UNIT TEST FOR T60 MODEL: COMPARING INFERENCE RESULTS OF PYTORCH MODEL AGAINST REFERENCE RESULTS")
             logger.info("EXPORTED T60 SAMPLE RESULTS: %s", actual_np)
             logger.info("EXPECTED RESULTS: %s", expected_reference)
             
@@ -287,7 +286,7 @@ def main():
             should_export = True
 
         if should_export:
-            logger.info("Starting ONNX export to %s", EXPORTED_ONNX_PATH)
+            logger.info("Starting ONNX export to %s\n\n\n", EXPORTED_ONNX_PATH)
 
             torch.onnx.export(
                 param_estimator_model,
@@ -295,7 +294,7 @@ def main():
                 EXPORTED_ONNX_PATH,
                 input_names=['input_spectrogram'],
                 output_names=['latents', 'params', 'quantiles'],
-                opset_version=17,
+                opset_version=18,
                 dynamic_axes={ 
                     'input_spectrogram': {0 : 'batch_size'},
                     'latents' : {0 : 'batch_size'},
@@ -303,10 +302,10 @@ def main():
                     'quantiles' : {0 : 'batch_size'}
                 },
                 dynamo = True,
-                report = True
+                report = False
             )
 
             logger.info("SUCCESS: ONNX model exported to %s.", EXPORTED_ONNX_PATH)
 
-
-
+if __name__ == "__main__":
+    main()
