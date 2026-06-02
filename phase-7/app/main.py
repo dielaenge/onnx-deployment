@@ -3,7 +3,9 @@ from .audio_utils import MelSpectrogram
 
 from fastapi import FastAPI, WebSocket, Request
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
+import asyncio
 
 import numpy as np
 
@@ -27,11 +29,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # --- ONNX model path ---
-MODEL_PATH = BASE_DIR / "models" / "bape_2026-04-13_15-13-22.onnx"
+T60_MODEL_PATH = BASE_DIR / "models" / "t60_bape_2025-11-18_17-40-57.onnx"
+C50_MODEL_PATH = BASE_DIR / "models" / "c50_bape_2025-11-18_19-33-41.onnx"
 
 # contextlib.asynccontextmanager used witht the lifespan parameter is recommended for defining app startup and shutdown in FastAPI
 
-# the @asynccontextmanager decorator creats an asynchronous context manager
+# the @asynccontextmanager decorator creates an asynchronous context manager
 # it expects an asynchronous function which *yield*s exactly one value
 # the code before yield is run at startup, the code after at shutdown
 @asynccontextmanager
@@ -40,8 +43,10 @@ async def lifespan(app: FastAPI):
     # AT STARTUP: initialize processor and melspec_processor 
     logger.info("BAPE app starting up…")
     # initialize model and melspec preprocessor
-    app.state.processor = AcousticModelProcessor(MODEL_PATH)
-    logger.info("AcousticModelProcessor initialized as processor.")
+    app.state.t60_processor = AcousticModelProcessor(T60_MODEL_PATH)
+    logger.info("AcousticModelProcessor for T60 params initialized as t60_processor.")
+    app.state.c50_processor = AcousticModelProcessor(C50_MODEL_PATH)
+    logger.info("AcousticModelProcessor for C50 params initialized as processor.")
     app.state.melspec_preprocessor = MelSpectrogram(
     sr=16000, 
     n_fft=64, 
@@ -59,8 +64,11 @@ async def lifespan(app: FastAPI):
 
     logger.info("BAPE app shutting down…")
     # AT SHUTDOWN: Clean up the ML models and release the resources
-    app.state.processor = None
-    logger.info("CLEANUP: processor set to None.")
+    app.state.t60_processor = None
+    logger.info("CLEANUP: T60 processor set to None.")
+    # AT SHUTDOWN: Clean up the ML models and release the resources
+    app.state.t60_processor = None
+    logger.info("CLEANUP: C50 processor set to None.")
     app.state.melspec_preprocessor = None
     logger.info("CLEANUP: melspec_preprocessor set to None.")
     
@@ -72,10 +80,12 @@ app = FastAPI(lifespan=lifespan)
 @app.get("/health")
 def health_check(request: Request):
     """Healthcheck endpoint."""
-    processor = request.app.state.processor
+    t60_processor = request.app.state.t60_processor
+    c50_processor = request.app.state.c50_processor
     return {
         "status": "ok",
-        "model_loaded": processor is not None
+        "t60_model_loaded": t60_processor is not None,
+        "c50_model_loaded": c50_processor is not None
         }
 
 # DEFAULT ENDPOINT
@@ -92,17 +102,22 @@ async def get_processor():
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     logger.info("Client connected via WebSocket.")
-
-    processor = websocket.app.state.processor
+    
+    # retrieve processor instances from asynccontextmanager / app.state
+    t60_processor = websocket.app.state.t60_processor
+    c50_processor = websocket.app.state.c50_processor
     melspec_preprocessor = websocket.app.state.melspec_preprocessor
+
+    # initialize rolling buffer
     audio_buffer = np.array([], dtype=np.float32)
+
     try:
         while True:
             # receive binary data from frontend websocket endpoint
-            raw_data = await websocket.receive_bytes()
+            raw_bytes = await websocket.receive_bytes()
 
             # convert bytes to float32 np array
-            converted_data = np.frombuffer(raw_data, dtype=np.float32)
+            converted_data = np.frombuffer(raw_bytes, dtype=np.float32)
             
             # concatenate converted_data (spliced in index.html's startRecording function) to rolling audio_buffer
             audio_buffer = np.concatenate((audio_buffer, converted_data))
@@ -114,32 +129,44 @@ async def websocket_endpoint(websocket: WebSocket):
                 session_id = str(uuid.uuid4())
                 logger.info("%s samples available.", len(audio_buffer))
                 logger.info("session_id: %s", session_id)
-                spectrogram_chunk = melspec_preprocessor(audio_buffer)
+                
+                spectrogram_array = app.state.melspec_preprocessor(audio_buffer) # shape [16, 2000]
 
                 # calculate mean and standard
-                mean = spectrogram_chunk.mean()
-                std = spectrogram_chunk.std()
+                mean = spectrogram_array.mean()
+                std = spectrogram_array.std()
+                # standardize spectrogram tensor
+                standardized_spectrogram = (spectrogram_array - mean) / (std + 1e-12)  
 
-                # standardize raw spectrogram tensor
-                standardized_spectrogram = (spectrogram_chunk - mean) / (std + 1e-12)
+                # create spectrogram slice; leave first dimension at index 0 as is (16); slice second dimension to only last 100 frames (100 frames * 32 (hop size) = 3200 samples or 200ms);transform to list as I will send it via JSON which doesn'tz support numpy arrays                    
+                spectrogram_slice = standardized_spectrogram[:,-100:].tolist()
 
-                # convert to numpy array
-                standardized_spectrogram_nparray = standardized_spectrogram.numpy()
-                
-                # reshape to 4D tensor
-                standardized_spectrogram_4d = np.expand_dims(standardized_spectrogram_nparray, axis=(0,1))
+                # reshape to 4D nparray, add dimensions at 0 and 1 -> shape [1,1,16,2000]
+                onnx_input_spectrogram = np.expand_dims(standardized_spectrogram, axis=(0,1))
 
-                # run inference
-                start_time = time.perf_counter()
-                results = processor.run_inference(standardized_spectrogram_4d)
-                end_time = time.perf_counter()
-                inference_time_ms = round((end_time - start_time)*1000, 2)
+                # INITIALIZE CONCURRENT INFERENCE THREADS
+                t60_inference = asyncio.to_thread(t60_processor.run_inference, onnx_input_spectrogram)
+                c50_inference = asyncio.to_thread(c50_processor.run_inference, onnx_input_spectrogram)
+
+                # RUN AND TIME CONCURRENT INFERENCE THREADS
+                start_time = time.perf_counter() # performance measure; can be commented out in prod
+                t60_results, c50_results = await asyncio.gather(t60_inference, c50_inference)
+                inference_time_ms = round((time.perf_counter() - start_time)*1000, 2) # performance measure; can be commented out in prod
 
                 # onnx model returns a list of 3 np arrays, which need to be converted to standard python lists so we can send them as a JSON
                 response_json = {
-                    "latents": results["latents"].tolist(),
-                    "params": results["params"].tolist(),
-                    "quantiles": results["quantiles"].tolist()
+                    "t60_bapes": {
+                        "latents": t60_results["latents"].tolist(),
+                        "params": t60_results["params"].tolist(),
+                        "quantiles": t60_results["quantiles"].tolist()
+                    },
+                    "c50_bapes": {
+                        "latents": c50_results["latents"].tolist(),
+                        "params": c50_results["params"].tolist(),
+                        "quantiles": c50_results["quantiles"].tolist()
+                    },
+                    "spectrogram_slice": spectrogram_slice,
+                    "inference_time_ms": inference_time_ms
                 }
                 
                 # Log session data
@@ -147,25 +174,31 @@ async def websocket_endpoint(websocket: WebSocket):
                     "event": "inference_complete",
                     "session_id": session_id,
                     "inference_time_ms": inference_time_ms,
-                    "shape": standardized_spectrogram_4d.shape,
-                    "t60_estimate_1khz_sample": results["params"].tolist()[0][0]
+                    "shape": onnx_input_spectrogram.shape,
+                    "t60_estimate_1khz_sample": t60_results["params"].tolist()[0][0],
+                    "c50_estimate_1khz_sample": c50_results["params"].tolist()[0][0]
                 }
 
                 logger.info(json.dumps(log_data))
 
-                # send results
+                # send results to client
                 await websocket.send_json(response_json)
 
-                # slice buffer to keep the latter half of the window (2 seconds; which will be concatenated with new input if available)
-                audio_buffer = audio_buffer[-32000:]
+                # slice buffer by 3200 samples (0.2 seconds), remaining 3.8 seconds will be concatenated with new input when available) // decreased stride vs phase 6
+                audio_buffer = audio_buffer[-60800:]
 
     except Exception as e:
-        logger.exception("Error in Websocket: %s", e)
+        logger.exception("Error in Websocket connection: %s", e)
+
+
+
+# Mount the static directory containing index.html and processor.js
+app.mount("/", StaticFiles(directory= BASE_DIR.parent / "src", html=True), name="static")
 
 # LAUNCH ON LOCALHOST
-#if __name__ == "__main__":
-#    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
+if __name__ == "__main__":
+    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
 
 # LAUNCH ON AWS - defined port 8080 in ecs.tf
-if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8080)
+#if __name__ == "__main__":
+#    uvicorn.run("app.main:app", host="0.0.0.0", port=8080)
