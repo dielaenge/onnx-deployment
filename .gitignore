@@ -108,3 +108,4 @@ phase-5-container-orchestration/app/models/bape_v2_standardized.onnx.data
 *.mov
 *.in
 *.md
+archive/
