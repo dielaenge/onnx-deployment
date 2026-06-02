@@ -1,5 +1,5 @@
 import logging
-
+from librosa.feature import melspectrogram
 import numpy as np
 
 # --- Logging Setup ---
