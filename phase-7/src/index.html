@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BAPE | Blind Acoustic Parameter Estimator | PHASE 6 - PROD DEPLOYMENT</title>
+    <title>BAPE | Blind Acoustic Parameter Estimator | PHASE 7 - HOT & COLD PATH DEPLOYMENT</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
@@ -33,8 +33,8 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 10v1a7 7 0 01-14 0v-1m10 8a3 3 0 11-6 0" />
                     </svg>
                 </button>
-                <p id="rec-text" class="text-slate-500 text-sm">Tap microphone to record.</p>
-            </div>
+            <p id="rec-text" class="text-slate-500 text-sm">Tap microphone to record.</p>
+        </div>
 
 <!--        COMMENTING OUT THE UPLOAD SECTION AS THIS SHOULD BE REAL-TIME ONLY (– FOR NOW?)
 
@@ -57,29 +57,33 @@
             <!-- Result Area -->
             <div id="result-area" class="hidden space-y-6 pt-4 border-t border-slate-800 text-left w-full">
                 
-                <!-- TOP: The Outputs (Chart + Legend) -->
-                <div class="space-y-2 w-full">
-                    <h3 class="text-emerald-500 uppercase text-[10px] font-black tracking-widest">Acoustic Parameter Timeline</h3>
-                    <div class="flex flex-col md:flex-row gap-4">
-                        <!-- D3 Chart -->
-                        <div class="w-full md:w-3/4 lg:w-4/5 h-[400px] lg:h-[600px] relative bg-black/40 rounded-xl border border-emerald-500/10 flex-shrink-0">
-                            <div id="chart-container" class="w-full h-full"></div>
-                            <!-- Tooltip -->
-                            <div id="tooltip" class="absolute opacity-0 bg-slate-900/90 border border-slate-700 text-slate-200 p-3 rounded-lg shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-full text-xs z-[100] backdrop-blur-sm transition-opacity duration-200">
-                                <div id="tt-header" class="font-bold text-white mb-1"></div>
-                                <div id="tt-value" class="font-mono text-emerald-400"></div>
-                            </div>
-                        </div>
-
-                        <!-- Legend -->
-                        <div id="chart-legend" class="w-full md:w-1/4 lg:w-1/5 grid grid-cols-2 md:grid-cols-1 gap-2 bg-slate-900/50 p-4 rounded-xl max-h-[400px] lg:max-h-[600px] overflow-y-auto content-start">
+                <!-- TOP: The Outputs (Side-by-Side Dual Dashboards) -->
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 w-full">
+                    
+                    <!-- Left Column: T60 Reverberation Decay -->
+                    <div class="space-y-2 bg-slate-900/40 p-4 rounded-2xl border border-emerald-500/10">
+                        <h3 class="text-emerald-500 uppercase text-[10px] font-black tracking-widest">T60 Decay Timeline (Seconds)</h3>
+                        <div class="flex flex-col md:flex-row gap-4 h-[550px]">
+                            <div id="t60-chart-container" class="w-full md:w-3/4 h-full relative bg-black/40 rounded-xl border border-emerald-500/5"></div>
+                            <div id="t60_params-legend" class="w-full md:w-1/4 grid grid-cols-2 md:grid-cols-1 gap-1 bg-slate-900/50 p-3 rounded-xl overflow-y-auto max-h-full"></div>
                         </div>
                     </div>
+
+                    <!-- Right Column: C50 Clarity Index -->
+                    <div class="space-y-2 bg-slate-900/40 p-4 rounded-2xl border border-emerald-500/10">
+                        <h3 class="text-emerald-500 uppercase text-[10px] font-black tracking-widest">C50 Clarity Timeline (dB)</h3>
+                        <div class="flex flex-col md:flex-row gap-4 h-[550px]">
+                            <div id="c50-chart-container" class="w-full md:w-3/4 h-full relative bg-black/40 rounded-xl border border-emerald-500/5"></div>
+                            <div id="c50_params-legend" class="w-full md:w-1/4 grid grid-cols-2 md:grid-cols-1 gap-1 bg-slate-900/50 p-3 rounded-xl overflow-y-auto max-h-full"></div>
+                        </div>
+                    </div>
+                    
                 </div>
 
-                <!-- BOTTOM: The Inputs (Audio + Spectrogram) // COMMENTED OUT AS THIS ISN'T PART OF THE MAIN APP ANYMORE; WILL BE DISTRIBUTED TO A DECOUPLED MICROSERVICE LATER
-                <div id="visual-verification" class="grid grid-cols-1 md:grid-cols-4 gap-6 bg-slate-900/30 p-6 rounded-xl border border-slate-800 items-center">
-                -->
+                <div class="lg:col-span-2 bg-slate-900/50 p-4 rounded-xl border border-slate-800">
+                    <h3 class="text-xs font-bold uppercase text-slate-500 mb-2">Live Spectrogram (Last 200ms)</h3>
+                    <canvas id="spectrogram-canvas" width="800" height="160" class="w-full h-32 bg-black rounded-lg"></canvas>
+                </div>
                     
                     <!-- Audio Player (Left, 1 column) 
                     <div class="space-y-2 md:col-span-1">
@@ -219,7 +223,6 @@ const jsonResult = document.getElementById('json-result');
 const resultArea = document.getElementById('result-area');
 
 // Web Audio API
-
 // Get the current hostname (to solve switching between local and cloud deployment)
 const host = window.location.host;
 
@@ -265,6 +268,18 @@ const colorScale = d3.scaleSequential(d3.interpolateWarm)
 // RECORDING LOGIC
 
 async function startRecording(){
+    // inform user
+    statusText.innerText = `Inference session started. First results in 4 seconds…`;
+    let countDown = 3;        
+    const countDownTimer = setInterval(() => {
+        statusText.innerText = `Inference session started. First results in ${countDown} seconds…`;
+        countDown--;
+        if (countDown < 0) {
+            clearInterval(countDownTimer);
+            statusText.innerText = "Inference results streaming…";
+        }
+    }, 1000);
+
     // get the mic stream
     micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     // set mic to record at 16kHz sample rate
@@ -285,10 +300,10 @@ async function startRecording(){
         for (let i = 0; i < rawFloats.length; i++) {
             chunkBuffer.push(rawFloats[i]);
         }
-        // If chunkBuffer.length >= 32000 (2 seconds at 16kHz):
-        if (chunkBuffer.length >= 32000) {
+        // If chunkBuffer.length >= 3200 (0.2 seconds at 16kHz):
+        if (chunkBuffer.length >= 3200) {
             // cut the first 32000 samples from the chunk, if there is a remainder it stays in the chunkBuffer
-            const chunkToSend = chunkBuffer.splice(0, 32000);
+            const chunkToSend = chunkBuffer.splice(0, 3200);
             // Convert chunkBuffer into a new Float32Array
             const payload = new Float32Array(chunkToSend);
             // send it over the websocket connect
@@ -301,7 +316,7 @@ async function startRecording(){
     console.log("Recording started");
     micBtn.removeEventListener("click", startRecording);
     micBtn.addEventListener("click", stopRecording);
-    statusText.innerText = "…starting inference session…";
+    jsonResult.textContent = JSON.stringify(currentTimelineData, null, 2);
     recText.innerText = "Tap microphone again to stop recording.";
 };
 
@@ -326,9 +341,9 @@ function stopRecording() {
 };
 
 // BUILD LEGEND
-function buildLegend() {
+function buildLegend(paramKey) {
     // Clear the legend before redrawing to prevent duplicates on resize
-    document.getElementById("chart-legend").innerHTML = "";
+    document.getElementById(`${paramKey}-legend`).innerHTML = "";
 
     // Loop through the data series
     bandLabels.forEach((band, index) => {
@@ -440,15 +455,16 @@ function buildLegend() {
         btn.appendChild(textCol);
 
         // Mount to the Page
-        document.getElementById("chart-legend").append(btn);
+        document.getElementById(`${paramKey}-legend`).append(btn);
     });
 };
-
-window.onload = buildLegend;
+window.onload = buildLegend(`t60_params`);
+window.onload = buildLegend(`c50_params`);
 
 // D3 visualisation
-function drawChart(timelineData) {
-    const container = document.getElementById('chart-container');
+function drawChart(timelineData, paramKey, divContainerId, yAxisLabel) {
+    const container = document.getElementById(divContainerId);
+
     const width = container.clientWidth;
     const height = container.clientHeight;
 
@@ -462,14 +478,17 @@ function drawChart(timelineData) {
 
     // 
     for (let p = 0; p < paramCount; p++) {
-        const paramsAndIntervals = timelineData.map(d => ({
-            time: d.timestamp_step,
+        const paramsAndIntervals = timelineData.map(d => {
             // BAPEs array has 21 items
             // param 0 uses indices 0,1,2 – param 1 uses 3,4,5 – …
-            low:  d.t60_BAPEs[p * 3], // Lower bound of confidence interval for parameter[p]
-            val:  d.t60_BAPEs[p * 3 + 1], // Actual estimate of parameter[p]
-            high: d.t60_BAPEs[p * 3 + 2] // Upper bound of confidence interval for parameter[p]
-        }));
+            const paramArray = d[paramKey];
+            return {
+                time: d.timestamp_step,
+                low:  paramArray[p * 3], // Lower bound of confidence interval for parameter[p]
+                val:  paramArray[p * 3 + 1], // Actual estimate of parameter[p]
+                high: paramArray[p * 3 + 2] // Upper bound of confidence interval for parameter[p]
+            };
+        });
         // extend the last data point to show the tail end of the last result
         if (paramsAndIntervals.length > 0) {
             const lastPoint = paramsAndIntervals[paramsAndIntervals.length - 1];
@@ -489,9 +508,9 @@ function drawChart(timelineData) {
     // TO DO: calculating the true global min/max for entire (ended) recording should be delegated to a decoupled microservice
 
     // Clear previous chart and create svg container
-    d3.select("#chart-container").selectAll("*").remove();
+    d3.select(`#${divContainerId}`).selectAll("*").remove();
 
-    const svg = d3.select("#chart-container")
+    const svg = d3.select(`#${divContainerId}`)
         .append("svg")
         .attr("width", width)
         .attr("height", height);
@@ -667,73 +686,91 @@ function drawChart(timelineData) {
     .text("BAPEs and Confidence");
 }
 
+// Spectrogram rendering
+function renderSpectrogram(spectrogramSlice) {
+    const canvas = document.getElementById("spectrogram-canvas");
+    const ctx = canvas.getContext("2d");
+    
+    const rows = 16;      // Mel Bins (vertical)
+    const cols = 100;     // Time slices (horizontal)
+    
+    const cellWidth = canvas.width / cols;
+    const cellHeight = canvas.height / rows;
+
+    for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+            const val = spectrogramSlice[row][col];
+            
+            // Map standardized float range [-3, +3] to color scale [0, 255]
+            let intensity = Math.floor(((val + 3) / 6) * 255);
+            intensity = Math.max(0, Math.min(255, intensity)); // Clamp boundary
+
+            // Bright green mapping
+            ctx.fillStyle = `rgb(0, ${intensity}, 0)`;
+            
+            // Draw rectangle (flip row vertically so high frequencies are at the top)
+            ctx.fillRect(
+                col * cellWidth, 
+                (rows - 1 - row) * cellHeight, 
+                cellWidth, 
+                cellHeight
+            );
+        }
+    }
+}
+
 // when websocket receives message
 ws.onmessage = function(event) {
     // parse the data from the main.py backend, which is on the other end of the websocket connection
     const incomingData = JSON.parse(event.data);
+
+    //render spectrogram
+    if (incomingData.spectrogram_slice) {
+        renderSpectrogram(incomingData.spectrogram_slice);
+    }
+    const t60Params = incomingData.t60_bapes.params[0].flat();
+    const t60Quantiles = incomingData.t60_bapes.quantiles[0].flat();
+
+    const c50Params = incomingData.c50_bapes.params[0].flat();
+    const c50Quantiles = incomingData.c50_bapes.quantiles[0].flat();
     // drawChart(), the D3.js script, expects a time counter and two one-dimensional arrays (correct?)
     // main.py sends nested arrays like [[[val1, val2, val3]]]
     // grab the first bacth [0] and flatten to a 1D array
     const newWindow = {
         timestamp_step: timeCounter,
-        time: `${timeCounter} – ${timeCounter + 4} seconds`,
-        t60_BAPEs: incomingData.params[0].flat(),
-        quantiles: incomingData.quantiles[0].flat()
+        time: `${timeCounter.toFixed(1)} – ${(timeCounter + 4).toFixed(1)} seconds`,
+
+        t60_params: t60Params,
+        t60_quantiles: t60Quantiles,
+        
+        c50_params: c50Params,
+        c50_quantiles: c50Quantiles
     };
-    
-    // increase the time counter by two for every websocket message
-    timeCounter += 2;
+
+    // increase the time counter by 200ms for every websocket message
+    timeCounter += 0.2;
 
     // streaming windows are pushed to the currentTimelineData array
     currentTimelineData.push(newWindow);
 
-    // show results in frontend
+    // Log performance metrics
+    console.log(`Inference took: ${incomingData.inference_time_ms} ms`);
+
+    // unhide result area
     resultArea.classList.remove('hidden');
 
-    /*  commetned out as this seems to lead to just blank space in the graph; earlier rtesults just "disappear"
-        if (currentTimelineData.length > 15) {
-        currentTimelineData.shift(); // remove the oldest entry to keep the timeline at 15 entries (30 seconds)
-    } */
+    // as we stream every 200ms / 5 data points per second / at 5Hz, we instruct the D3 frontend to render 300 SVG paths per minute, which might lead to a lag
+    // to prevent the DOM from breaking under the payload, a 10s rollingHistory is created which instructs the D3 function to only render the last 50 data points / 10 seconds 
+    const rollingHistory = currentTimelineData.slice(-50);
 
-    // Frontend debugging
-    // console.log("Raw Incoming Data:", incomingData);
-    // console.log("Formatted Frame for D3:", newWindow);
+    // draw charts
+    drawChart(rollingHistory, 't60_params', 't60-chart-container', 'T60 Decay (Seconds)');
+    drawChart(rollingHistory, 'c50_params', 'c50-chart-container', 'C50 Clarity (dB)');
 
-    drawChart(currentTimelineData);
-
-    statusText.innerText = "Analyzing audio stream…";
-    jsonResult.textContent = JSON.stringify(currentTimelineData, null, 2);
-}
-
-
-
-// --- MICROPHONE LOGIC ---
-/* micBtn.onclick = async () => {
-    if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
-            audioChunks = [];
-            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-            mediaRecorder.onstop = () => upload(new Blob(audioChunks, { type: 'audio/wav' }));
-            mediaRecorder.start();
-            micBtn.classList.add('recording-glow', 'border-red-500');
-            statusText.innerText = "Recording...";
-            recText.innerText = "Tap microphone to stop recording.";
-            
-        } 
-        catch (err) { alert("Mic access denied."); }
-    } 
-    else {
-        mediaRecorder.stop();
-        micBtn.classList.remove('recording-glow', 'border-red-500');
-        statusText.innerText = "Processing...";
-    }
 };
- */
+
 
 // re-render D3 graphs on window resize
-
 let resizeTimer;
 
 window.addEventListener("resize", () => {
@@ -741,9 +778,10 @@ window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
     // 2. Set a new timer to run 200ms AFTER the last resize event
     resizeTimer = setTimeout(() => {
-    if (currentTimelineData) {
+    if (rollingHistory) {
         // Recalculate dimensions and redraw
-        drawChart(currentTimelineData);
+        drawChart(rollingHistory, 't60_params', 't60-chart-container', 'T60 Decay (Seconds)');
+        drawChart(rollingHistory, 'c50_params', 'c50-chart-container', 'C50 Clarity (dB)');
     }
     }, 200);
 });
