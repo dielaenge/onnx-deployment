@@ -48,6 +48,25 @@ ENCODER_WEIGHTS_PATH = ( PROJECT_ROOT / "scripts" / "bape_local" / "weights" / "
 
 REF_AUDIO_PATH = ( PROJECT_ROOT / "src" / "wet_speech.wav" )
 
+T60_ESTIMATE_REFERENCE = [
+    0.4660, 0.5458, 0.8592,     # 125 Hz (Low, Val, High)
+    0.4256, 0.4902, 0.6812,     # 250 Hz
+    0.4072, 0.4727, 0.5864,     # 500 Hz
+    0.3734, 0.4223, 0.5851,     # 1 kHz
+    0.3763, 0.4322, 0.6023,     # 2 kHz
+    0.3962, 0.4663, 0.6472,     # 4 kHz
+    0.3865, 0.4850, 0.6598      # 8 kHz
+]
+C50_ESTIMATE_REFERENCE = [
+    2.5667, 7.4392, 9.9037,    # 125 Hz (Low, Val, High)
+    5.1374, 7.9748, 10.3585,   # 250 Hz
+    7.4450, 9.1362, 11.5843,   # 500 Hz
+    10.1715, 11.6294, 13.5994, # 1 kHz
+    11.4975, 13.8475, 16.2377, # 2 kHz
+    13.0668, 15.4375, 18.0963, # 4 kHz
+    13.8244, 18.2971, 23.0364  # 8 kHz
+]
+
 timestamp = datetime.now().strftime(f"%Y-%m-%d_%H-%M-%S")
 
 def parse_args():
@@ -66,13 +85,16 @@ def main():
 # DEFINE FOR WHICH PARAM, THE MODEL EXPORT SHOULD HAPPEN
     if args.param == "T60":
         weights_path = T60_WEIGHTS_PATH
-        EXPORTED_ONNX_PATH = ( PROJECT_ROOT / "app" / "models" / f"t60_bape_{timestamp}.onnx" )
-        expected_reference = [0.4660, 0.5458, 0.8592]
+        EXPORTED_ONNX_PATH = ( PROJECT_ROOT / "app" / "models" / f"t60_bape_{weights_path.parent.name}.onnx" )
+        expected_reference = T60_ESTIMATE_REFERENCE
+        tolerance = 0.05
         logger.info("Exporting ONNX model for T60 estimation to %s", EXPORTED_ONNX_PATH)
     elif args.param == "C50":
         weights_path = C50_WEIGHTS_PATH
-        EXPORTED_ONNX_PATH = ( PROJECT_ROOT / "app" / "models" / f"c50_bape_{timestamp}.onnx" )
-        expected_reference = None
+        EXPORTED_ONNX_PATH = ( PROJECT_ROOT / "app" / "models" / f"c50_bape_{weights_path.parent.name}.onnx" )
+        expected_reference = C50_ESTIMATE_REFERENCE
+        tolerance = 0.6
+        logger.info("Exporting ONNX model for C50 estimation to %s", EXPORTED_ONNX_PATH)
 
     # I. Assembling the model, the architectural shell, from scratch
     logger.info("Step 1: Definining the 'Super Model' class which returns both the outputs of the speech encoder and the parameter estimator.")
@@ -264,26 +286,35 @@ def main():
     # --- THE SELF-TEST ---
     with torch.no_grad():
         z, output, quantiles = param_estimator_model(final_4d_tensor)
-        actual_np = output[0, 0, :3].numpy()
-        tolerance = 0.05
+        actual_np = output[0].cpu().numpy().flatten()
+        raw_quantiles_np = quantiles[0].cpu().numpy().flatten()
         should_export = False
 
-        if expected_reference is not None:
+        if expected_reference is T60_ESTIMATE_REFERENCE:
             logger.info("UNIT TEST FOR T60 MODEL: COMPARING INFERENCE RESULTS OF PYTORCH MODEL AGAINST REFERENCE RESULTS")
-            logger.info("EXPORTED T60 SAMPLE RESULTS: %s", actual_np)
-            logger.info("EXPECTED RESULTS: %s", expected_reference)
+            logger.info("T60 PARAMS TEST EXPORT: %s", actual_np)
+            logger.info("EXPECTED REFERENCE RESULTS: %s", T60_ESTIMATE_REFERENCE)
+            logger.info("T60 QUANTILES TEST EXPORT: %s", raw_quantiles_np)
             
-            if np.allclose(actual_np, expected_reference, atol=tolerance):
-                logger.info("All values within %s tolerance. T60 unit test passed.", tolerance)
+            if np.allclose(actual_np, T60_ESTIMATE_REFERENCE, atol=tolerance):
+                logger.info("All values within tolerance of %s. T60 unit test passed.", tolerance)
                 should_export = True
             
             else:
-                logger.error("Output mismatch caused T60 unit test failure. Cancelling export…")
+                logger.error("Not all values within tolerance of %s. T60 unit test failure. Cancelling export…", tolerance)
 
-        else: 
-            logger.info("Step 4: Exporting C50 model to ONNX…")
-            logger.info("EXPORTED C50 SAMPLE RESULTS: %s", actual_np)
-            should_export = True
+        elif expected_reference is C50_ESTIMATE_REFERENCE:
+            logger.info("UNIT TEST FOR C50 MODEL: COMPARING INFERENCE RESULTS OF PYTORCH MODEL AGAINST REFERENCE RESULTS")
+            logger.info("C50 PARAMS TEST EXPORT: %s", actual_np)
+            logger.info("EXPECTED REFERENCE RESULTS: %s", C50_ESTIMATE_REFERENCE)
+            logger.info("C50 QUANTILES TEST EXPORT: %s", raw_quantiles_np)
+            
+            if np.allclose(actual_np, C50_ESTIMATE_REFERENCE, atol=tolerance):
+                logger.info("All values within tolerance of %s. C50 unit test passed.", tolerance)
+                should_export = True
+            
+            else:
+                logger.error("Not all values within tolerance of %s. C50 unit test failure. Cancelling export…", tolerance)
 
         if should_export:
             logger.info("Starting ONNX export to %s\n\n\n", EXPORTED_ONNX_PATH)
