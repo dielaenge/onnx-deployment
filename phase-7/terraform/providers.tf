@@ -6,7 +6,7 @@ provider "aws" {
 
     default_tags {
       tags = {
-        Phase = "phase6"
+        Phase = "phase7"
         ManagedBy = "Terraform"
         AWSEnvironment = "dev"
       }

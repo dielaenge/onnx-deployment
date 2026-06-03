@@ -60,7 +60,7 @@ resource "aws_iam_role_policy" "s3_access" {
       Statement = [{
         Action   = ["s3:GetObject", "s3:PutObject"]
         Effect   = "Allow"
-        Resource = "${aws_s3_bucket.bape_app_data_phase6.arn}/*"
+        Resource = "${aws_s3_bucket.bape_app_data_phase7.arn}/*"
       }]
     }
   )

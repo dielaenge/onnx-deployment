@@ -1,8 +1,8 @@
 #---------------------------
 # BAPE-INFERENCE-TF ECR REPO
 #---------------------------
-resource "aws_ecr_repository" "bape-phase6-inference" {
-  name                 = "bape-phase6-inference"
+resource "aws_ecr_repository" "bape-phase7" {
+  name                 = "bape-phase7"
   image_tag_mutability = "MUTABLE"
   force_delete         = true
 
@@ -11,6 +11,6 @@ resource "aws_ecr_repository" "bape-phase6-inference" {
   }
 
   tags = {
-    Name = "ECR-Repo_phase6"
+    Name = "ECR-Repo_phase7"
   }
 }

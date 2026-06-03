@@ -10,10 +10,10 @@ data "aws_availability_zones" "available" {
 # -------------------------------
 # S3 BUCKET FOR PHASE 6 APP DATA
 # -------------------------------
-resource "aws_s3_bucket" "bape_app_data_phase6" {
-  bucket = "bape-app-data-phase6-davidg"
+resource "aws_s3_bucket" "bape_app_data_phase7" {
+  bucket = "bape-app-data-phase7-davidg"
 
   tags = {
-    Name        = "bape_app_data_phase6"
+    Name        = "bape_app_data_phase7"
   }
 }

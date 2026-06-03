@@ -23,7 +23,7 @@ resource "aws_iam_role" "github_actions_role" {
         Condition : {
           StringEquals : {
             # restrict AWS access to pushes only on container-orchestration branch
-            "token.actions.githubusercontent.com:sub" : "repo:dielaenge/onnx-deployment:ref:refs/heads/feat/production-ready",
+            "token.actions.githubusercontent.com:sub" : "repo:dielaenge/onnx-deployment:ref:refs/heads/feat/phase7",
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           }
         }
@@ -35,7 +35,7 @@ resource "aws_iam_role" "github_actions_role" {
 # PERMISSIONS POLICY: The permissions attached to the GitHub Actions' badge
 
 resource "aws_iam_role_policy" "github_actions_permissions" {
-  name = "github-actions-bape-premissions-policy"
+  name = "github-actions-bape-permissions-policy"
   role = aws_iam_role.github_actions_role.id
 
   policy = jsonencode({
@@ -49,8 +49,8 @@ resource "aws_iam_role_policy" "github_actions_permissions" {
           "s3:ListBucket"
         ]
         Resource = [
-          "arn:aws:s3:::bape-app-data-phase6-davidg",  # Allows listing the bucket / addressed explicitly to avoid dependency applies when running target applies
-          "arn:aws:s3:::bape-app-data-phase6-davidg/*" # Allows downloading the files inside addressed explicitly to avoid dependency applies when running target applies
+          "arn:aws:s3:::bape-app-data-phase7-davidg",  # Allows listing the bucket / addressed explicitly to avoid dependency applies when running target applies
+          "arn:aws:s3:::bape-app-data-phase7-davidg/*" # Allows downloading the files inside addressed explicitly to avoid dependency applies when running target applies
         ]
       },
       {
@@ -60,7 +60,7 @@ resource "aws_iam_role_policy" "github_actions_permissions" {
         Resource = "*"
       },
       {
-        # Permission to push to bape-phase6-inference ECR repository
+        # Permission to push to bape-phase7 ECR repository
         Effect = "Allow"
         Action = [
           "ecr:BatchCheckLayerAvailability",
@@ -75,7 +75,7 @@ resource "aws_iam_role_policy" "github_actions_permissions" {
           "ecr:CompleteLayerUpload",
           "ecr:PutImage"
         ]
-        Resource = "arn:aws:ecr:eu-central-1:*:repository/bape-phase6-inference" #addressed explicitly to avoid dependency applies when running target applies
+        Resource = "arn:aws:ecr:eu-central-1:*:repository/bape-phase7" #addressed explicitly to avoid dependency applies when running target applies
       },
       {
         # Permission to force a new deployment in ECS

@@ -1,5 +1,5 @@
-resource "aws_s3_bucket" "bape_phase6_frontend" {
-  bucket = "bape-phase6-frontend-davidg"
+resource "aws_s3_bucket" "bape_phase7_frontend" {
+  bucket = "bape-phase7-frontend-davidg"
 
   tags = {
     Name = "frontend_bucket"
@@ -22,13 +22,13 @@ data "aws_iam_policy_document" "origin_bucket_policy" {
     ]
 
     resources = [
-      "${aws_s3_bucket.bape_phase6_frontend.arn}/*",
+      "${aws_s3_bucket.bape_phase7_frontend.arn}/*",
     ]
 
     condition {
       test     = "StringEquals"
       variable = "AWS:SourceArn"
-      values   = [aws_cloudfront_distribution.bape_phase6_frontend_s3_distribution.arn]
+      values   = [aws_cloudfront_distribution.bape_phase7_frontend_s3_distribution.arn]
     }
   }
 }
@@ -41,26 +41,26 @@ data "aws_cloudfront_cache_policy" "caching_disabled" {
   name = "Managed-CachingDisabled"
 }
 
-resource "aws_s3_bucket_policy" "bape_phase6_frontend_bucket_policy" {
-  bucket = aws_s3_bucket.bape_phase6_frontend.bucket
+resource "aws_s3_bucket_policy" "bape_phase7_frontend_bucket_policy" {
+  bucket = aws_s3_bucket.bape_phase7_frontend.bucket
   policy = data.aws_iam_policy_document.origin_bucket_policy.json
 }
 
-resource "aws_cloudfront_origin_access_control" "bape_phase6_oac" {
-  name                              = "bape-phase6-oac"
+resource "aws_cloudfront_origin_access_control" "bape_phase7_oac" {
+  name                              = "bape-phase7-oac"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
 }
 
 
-resource "aws_cloudfront_distribution" "bape_phase6_frontend_s3_distribution" {
+resource "aws_cloudfront_distribution" "bape_phase7_frontend_s3_distribution" {
   enabled = true
 
   origin {
-    domain_name              = aws_s3_bucket.bape_phase6_frontend.bucket_regional_domain_name
+    domain_name              = aws_s3_bucket.bape_phase7_frontend.bucket_regional_domain_name
     origin_id                = local.s3_origin_id
-    origin_access_control_id = aws_cloudfront_origin_access_control.bape_phase6_oac.id
+    origin_access_control_id = aws_cloudfront_origin_access_control.bape_phase7_oac.id
   }
 
   origin {

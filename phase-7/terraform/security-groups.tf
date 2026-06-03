@@ -27,7 +27,7 @@ resource "aws_vpc_security_group_ingress_rule" "vpc_endpoint_ingress" {
 
 # ECS Fargate Container Security Group
 resource "aws_security_group" "ecs_fargate_containers_sg" {
-  name        = "ECS Fargate Conatiners SG"
+  name        = "ECS Fargate Containers SG"
   description = "Allow incoming traffic from BAPE ALB SG and outgoing, private traffic to Gateway endpoints (ECR, S3, CloudWatch.)"
   vpc_id      = aws_vpc.bape-vpc.id
 

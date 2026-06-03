@@ -14,7 +14,7 @@ resource "aws_ecs_task_definition" "task_definition_bape" {
   container_definitions = jsonencode([
     {
       name      = "bape-container"
-      image     = "${aws_ecr_repository.bape-phase6-inference.repository_url}:phase6"
+      image     = "${aws_ecr_repository.bape-phase6-inference.repository_url}:phase7"
       essential = true
       portMappings = [
         {
@@ -33,15 +33,15 @@ resource "aws_ecs_task_definition" "task_definition_bape" {
         },
         {
           name  = "APP_BUCKET_NAME"
-          value = aws_s3_bucket.bape_app_data_phase6.id
+          value = aws_s3_bucket.bape_app_data_phase7.id
         }
       ]
       logConfiguration = {
         logDriver = "awslogs",
         options = {
-          "awslogs-group"  = aws_cloudwatch_log_group.log_group_ecs_bape_inference.name
+          "awslogs-group"  = aws_cloudwatch_log_group.log_group_ecs_bape_phase7.name
           "awslogs-region" = "eu-central-1"
-          "awslogs-stream-prefix" : "bape-ecs_"
+          "awslogs-stream-prefix" : "bape-ecs-phase7_"
         }
       }
     }
