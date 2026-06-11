@@ -6,6 +6,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 import asyncio
+import boto3
+from botocore.exceptions import ClientError
+from botocore.config import Config
 
 import numpy as np
 
@@ -15,6 +18,7 @@ from pathlib import Path
 
 from contextlib import asynccontextmanager
 
+import os
 import uuid
 import time
 
@@ -74,8 +78,8 @@ async def lifespan(app: FastAPI):
     
 app = FastAPI(lifespan=lifespan)
 
-#API ENDPOINTS
 
+#API ENDPOINTS
 #HEALTHCHECK ENDPOINT
 @app.get("/health")
 def health_check(request: Request):
@@ -186,11 +190,55 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 # slice buffer by 3200 samples (0.2 seconds), remaining 3.8 seconds will be concatenated with new input when available) // decreased stride vs phase 6
                 audio_buffer = audio_buffer[-60800:]
-
+    
     except Exception as e:
         logger.exception("Error in Websocket connection: %s", e)
 
+@app.get("/api/get-upload-url")
+# create presigned URLs
+def create_presigned_upload_url(
+    expiration=300
+):
+    """Generate a presigned URL to share an S3 object
 
+    :param expiration: Time in seconds for the presigned URL to remain valid
+    :return: JSON response containing upload URL as string and upload file name. If error, returns None.
+    """
+    
+    BUCKET_NAME = os.environ.get("S3_BUCKET_NAME")
+    REGION_NAME = os.environ.get("AWS_REGION")
+    session_id = str(uuid.uuid4())
+
+    s3_client=boto3.client(
+        's3',
+        region_name=REGION_NAME,
+        config=Config(
+            signature_version='s3v4',
+            s3={'addressing_style': 'virtual'},
+            )
+        )
+    
+    try:
+        upload_url = s3_client.generate_presigned_url(
+            ClientMethod='put_object',
+            Params={
+                "Bucket":BUCKET_NAME,
+                "Key":f"uploads/{session_id}.wav"
+            },
+            ExpiresIn=expiration
+        )
+
+        presigned_url_response_json = {
+            "upload_url": upload_url,
+            "object_key": f"uploads/{session_id}.wav",
+        }
+
+    except ClientError as e:
+        logging.error(e)
+        return None
+
+    # The response contains the presigned URL
+    return presigned_url_response_json
 
 # Mount the static directory containing index.html and processor.js
 app.mount("/", StaticFiles(directory= BASE_DIR.parent / "src", html=True), name="static")
