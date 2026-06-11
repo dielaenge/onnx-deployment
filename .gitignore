@@ -38,6 +38,7 @@ pip-wheel-metadata/
 .pytest_cache/
 .tox/
 .nox/
+outputs/
 
 # --- IDE & Editor Folders ---
 .vscode/
