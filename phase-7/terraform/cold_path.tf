@@ -1,7 +1,7 @@
 # WHat is required for the cold path?
 # - SQS queue
 # - S3 bucket notification
-# - SQS policy to allow S3 bucket to poll the SQS queue
+# - SQS policy to allow S3 bucket notification to send messages to the sqs queue
 
 resource "aws_sqs_queue" "bape_cold_path_queue" {
     name = "bape-cold-path-queue"
@@ -37,11 +37,28 @@ resource "aws_sqs_queue_policy" "bape_cold_path_queue_policy" {
 }
 
 resource "aws_s3_bucket_notification" "bape_s3_notification" {
-    bucket = "bape-app-data-phase7-davidg"
+    bucket = aws_s3_bucket.bape_app_data_phase7_davidg.id
 
     queue {
         events = ["s3:ObjectCreated:*"]
         filter_prefix = "uploads/"
         queue_arn = aws_sqs_queue.bape_cold_path_queue.arn
     }
+
+    depends_on = [ 
+        aws_sqs_queue_policy.bape_cold_path_queue_policy 
+        ]
+}
+
+resource "aws_s3_bucket_cors_configuration" "cors_config_phase7_app_data_bucket" {
+    bucket = aws_s3_bucket.bape_app_data_phase7_davidg.id
+
+    cors_rule {
+        allowed_headers = ["*"]
+        allowed_methods = ["PUT"]
+        allowed_origins = [aws_cloudfront_distribution.bape_phase7_frontend_s3_distribution.url]
+        expose_headers  = []
+        max_age_seconds = 3000
+    }
+  
 }
