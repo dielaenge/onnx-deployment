@@ -73,7 +73,7 @@ planout
 Thumbs.db
 *.pkg
 
-# --- big artifacts ---
+# --- big artifacts and binary ---
 *.zip
 *.tar.xz
 *.tar.gz
@@ -81,6 +81,7 @@ ffmpeg*
 *.tgz
 # previously allowed onnx files because they are < 15MB in size
 *.onnx
+*.pth
 
 # --- Project Specific Artifacts ---
 .local/
@@ -108,5 +109,4 @@ phase-5-container-orchestration/app/models/bape_v2_standardized.onnx.data
 *.in
 *.md
 archive/
-scripts/
 assets/

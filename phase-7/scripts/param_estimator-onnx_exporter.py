@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 from datetime import datetime
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from hydra.utils import to_absolute_path, instantiate
 import logging
 
@@ -15,20 +15,15 @@ logger = logging.getLogger(__name__)
 # --- Path logic ---
 # Get directory of this script
 SCRIPT_DIR = Path(__file__).resolve().parent
-# Get project root directory (repo root is the script's folder)
-PROJECT_ROOT = SCRIPT_DIR
-# Add the project root to the search path
-if PROJECT_ROOT not in sys.path:
-    sys.path.append(str(PROJECT_ROOT))
-logger.debug("Project root is: %s. Script running from %d.", PROJECT_ROOT, SCRIPT_DIR)
-logger.debug("Script running from %s.", SCRIPT_DIR)
+PROJECT_ROOT = SCRIPT_DIR.parent
+logger.debug("Exporter script running from %s.", PROJECT_ROOT)
+
 
 # app-specific imports
 import librosa
 import torch
 import torch.nn as nn
 import numpy as np
-from omegaconf import OmegaConf
 
 # imports from local modules
 from src.util.signals import MelSpectrogram
@@ -40,30 +35,26 @@ from src.util.signals import MelSpectrogram
 timestamp = datetime.now().strftime(f"%Y-%m-%d_%H-%M-%S")
 
 
-@hydra.main(config_path="./conf", config_name="exporter", version_base=None)
+@hydra.main(config_path="../conf", config_name="exporter", version_base=None)
 def main(cfg: DictConfig) -> None:
+    logger.info("Step 1. Resolve config paths.")
     # Resolve configured absolute paths
     cfg_ref_audio = to_absolute_path(cfg.ref_audio)
     cfg_output_tuple = to_absolute_path(cfg.output_tuple)
 
     # 1. Load run config
     run_cfg_path = to_absolute_path(cfg.run_cfg)
-    logger.info("Loading model config from %s", run_cfg_path)
+    logger.info("Step 2. Loading model config from %s", run_cfg_path)
     run_cfg = OmegaConf.load(run_cfg_path)
 
     # Resolve param name and setup paths
     param_name = run_cfg.get("target", run_cfg.get("param", "unknown")).upper()
     weights_path = PROJECT_ROOT / cfg.model_weights
 
-    EXPORTED_ONNX_PATH = Path(cfg.export_dir) / "model.onnx"
-    # EXPORTED_ONNX_PATH = (
-    #     PROJECT_ROOT
-    #     / cfg.export_dir
-    #     / f"{param_name.lower()}_bape_{weights_path.parent.name}.onnx"
-    # )
+    EXPORTED_ONNX_PATH = PROJECT_ROOT / cfg.export_dir / f"{param_name.lower()}_bape_{weights_path.parent.name}.onnx"
 
     # 2. Instantiate base model and wrapper
-    logger.info("Instantiating base_model from run config...")
+    logger.info("Step 3. Instantiating base_model from run_config...")
     base_model = instantiate(run_cfg.model)
 
     class ExportWrapper(nn.Module):
@@ -73,17 +64,17 @@ def main(cfg: DictConfig) -> None:
 
         def forward(self, x):
             if getattr(self.base, "is_vae", False):
-                z = self.base.encoder.encode(x)[0].flatten(start_dim=1)
+                latents = self.base.encoder.encode(x)[0].flatten(start_dim=1)
             else:
-                z = self.base.encoder(x)[0]
-            outputs, quantiles = self.base(x)
-            return z, outputs, quantiles
+                latents = self.base.encoder(x)[0]
+            params, quantiles = self.base(x)
+            return latents, params, quantiles
 
     param_estimator_model = ExportWrapper(base_model)
     logger.info("PyTorch model wrapped as `param_estimator_model`.\n\n")
 
     # 3. Load weights into model
-    logger.info("Step 3: Loading pre-trained weights from %s", weights_path)
+    logger.info("Step 4: Loading pre-trained weights from %s", weights_path)
     state_dict = torch.load(weights_path, map_location="cpu")
     logger.debug("Keys loaded in state_dict: %s", state_dict.keys())
     base_model.load_state_dict(state_dict, strict=True)
@@ -93,7 +84,7 @@ def main(cfg: DictConfig) -> None:
     logger.info("Model set to evaluation mode.\n\n")
 
     # 4. Prepare input for onnx export
-    logger.info("Step 4: Prepare input for onnx export.")
+    logger.info("Step 5: Prepare input for onnx export.")
     logger.info("Instantiating MelSpectrogram object as `preprocessor`…")
 
     preprocessor = MelSpectrogram(
