@@ -55,8 +55,8 @@ resource "aws_vpc_endpoint" "cloudwatch-logs-interface" {
 }
 # CloudWatch Log Group
 
-resource "aws_cloudwatch_log_group" "log_group_ecs_bape_inference" {
-  name = "log-group-ecs-bape-inference"
+resource "aws_cloudwatch_log_group" "log_group_ecs_bape_inference_phase7" {
+  name = "log-group-ecs-bape-inference-phase7"
 
   tags = {
     Name  = "log_group_ecs_bape_inference"

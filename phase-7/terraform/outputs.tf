@@ -1,7 +1,7 @@
 # ALL OUTPUT BLOCKS (APLPHABETICAL ORDER)
 output "bape-phase7-tf-repository_url" {
   description = "Repository URL for bape-phase7 ECR repository"
-  value       = aws_ecr_repository.bape-phase7.repository_url
+  value       = aws_ecr_repository.bape_ecr_phase7.repository_url
 }
 
 output "cloudfront_phase7_url" {

@@ -29,7 +29,7 @@ resource "aws_sqs_queue_policy" "bape_cold_path_queue_policy" {
       
       Condition = {
         ArnLike = {
-          "aws:SourceArn" = aws_s3_bucket.bape_app_data_phase7_davidg.arn
+          "aws:SourceArn" = aws_s3_bucket.bape_app_data_phase7.arn
         }
       }
     }]
@@ -37,7 +37,7 @@ resource "aws_sqs_queue_policy" "bape_cold_path_queue_policy" {
 }
 
 resource "aws_s3_bucket_notification" "bape_s3_notification" {
-    bucket = aws_s3_bucket.bape_app_data_phase7_davidg.id
+    bucket = aws_s3_bucket.bape_app_data_phase7.id
 
     queue {
         events = ["s3:ObjectCreated:*"]
@@ -51,14 +51,16 @@ resource "aws_s3_bucket_notification" "bape_s3_notification" {
 }
 
 resource "aws_s3_bucket_cors_configuration" "cors_config_phase7_app_data_bucket" {
-    bucket = aws_s3_bucket.bape_app_data_phase7_davidg.id
+    bucket = aws_s3_bucket.bape_app_data_phase7.id
 
     cors_rule {
         allowed_headers = ["*"]
         allowed_methods = ["PUT"]
-        allowed_origins = [aws_cloudfront_distribution.bape_phase7_frontend_s3_distribution.url]
+        allowed_origins = [
+          "https://${aws_cloudfront_distribution.bape_phase7_frontend_s3_distribution.domain_name}",
+          "127.0.0.1:8000"
+          ]
         expose_headers  = []
         max_age_seconds = 3000
-    }
-  
+    }  
 }
