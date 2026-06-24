@@ -32,8 +32,17 @@ resource "aws_ecs_task_definition" "task_definition_bape" {
           "value" = "/tmp"
         },
         {
-          name  = "APP_BUCKET_NAME"
-          value = aws_s3_bucket.bape_app_data_phase7.id
+          "name"  = "APP_BUCKET_NAME",
+          "value" = aws_s3_bucket.bape_app_data_phase7.id
+        },
+        {
+          "name" = "UVICORN_HOST",
+          "value" = "0.0.0.0"
+
+        },
+        {
+          "name" = "UVICORN_PORT",
+          "value" = "8080"
         }
       ]
       logConfiguration = {

@@ -25,6 +25,9 @@ import time
 # Identify Base Directory
 BASE_DIR = Path(__file__).resolve().parent
 
+# Identify src directory for static files, which are used when running locally
+static_dir = BASE_DIR.parent / "src"
+
 # --- Logging Setup ---
 logging.basicConfig(
     level=logging.INFO,
@@ -256,13 +259,25 @@ def create_presigned_upload_url(
     # The response contains the presigned URL
     return presigned_url_response_json
 
-# Mount the static directory containing index.html and processor.js
-app.mount("/", StaticFiles(directory= BASE_DIR.parent.parent / "src", html=True), name="static")
 
-# LAUNCH ON LOCALHOST
-#if __name__ == "__main__":
-#    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
+# check if app is run locally or on cloud, either mount from local static directory or skip and serve frontend from CloudFront / S3
+if static_dir.exists() and static_dir.is_dir():
+    # Mount the static directory containing index.html and processor.js
+    app.mount("/", StaticFiles(directory= static_dir / "src", html=True), name="static")
+    logger.info("/src directory found. Running in Local Dev Mode.")
+else: 
+    logger.info("Static directory '/src' not found. Skipping static mount (Cloud Production Mode).")
 
-# LAUNCH ON AWS - defined port 8080 in ecs.tf
+# conditional launch command to determine if run locally or on cloud
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8080)
+    # Fetch values from environment variables with fallback defaults ('127.0.0.1' and '8000') when env variables cant be resolved
+    host = os.environ.get("UVICORN_HOST", "127.0.0.1")
+    port = int(os.environ.get("UVICORN_PORT", "8000"))
+    
+    logger.info(f"Launching Uvicorn on {host}:{port} ")
+    
+    uvicorn.run(
+        "app.main:app", 
+        host=host, 
+        port=port
+    )
