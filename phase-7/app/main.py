@@ -1,7 +1,7 @@
 from .inference_engine import AcousticModelProcessor
 from .audio_utils import MelSpectrogram
 
-from fastapi import FastAPI, WebSocket, Request
+from fastapi import FastAPI, WebSocket, Request, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -60,7 +60,7 @@ async def lifespan(app: FastAPI):
     fmax=8000, 
     power=2.0, 
     log_mag=True,
-    trunc=2000
+    trunc=2001
     )
     logger.info("MelSpectrogram initialized as melspec_preprocessor.")
 
@@ -112,8 +112,11 @@ async def websocket_endpoint(websocket: WebSocket):
     c50_processor = websocket.app.state.c50_processor
     melspec_preprocessor = websocket.app.state.melspec_preprocessor
 
-    # initialize rolling buffer
+    # initialize rolling audio buffer
     audio_buffer = np.array([], dtype=np.float32)
+
+    # initialize spectrogram_buffer
+    accumulated_spec = []
 
     try:
         while True:
@@ -125,7 +128,8 @@ async def websocket_endpoint(websocket: WebSocket):
             
             # concatenate converted_data (spliced in index.html's startRecording function) to rolling audio_buffer
             audio_buffer = np.concatenate((audio_buffer, converted_data))
-
+            
+            # append 
             #check if buffer has enough data for 4 seconds (required by onnx model)
             if len(audio_buffer) >= 64000:
                 
@@ -134,16 +138,20 @@ async def websocket_endpoint(websocket: WebSocket):
                 logger.info("%s samples available.", len(audio_buffer))
                 logger.info("session_id: %s", session_id)
                 
-                spectrogram_array = app.state.melspec_preprocessor(audio_buffer) # shape [16, 2000]
+                spectrogram_chunk = melspec_preprocessor(audio_buffer) # shape [16, 2000]
 
                 # calculate mean and standard
-                mean = spectrogram_array.mean()
-                std = spectrogram_array.std()
+                mean = spectrogram_chunk.mean()
+                std = spectrogram_chunk.std()
                 # standardize spectrogram tensor
-                standardized_spectrogram = (spectrogram_array - mean) / (std + 1e-12)  
+                standardized_spectrogram = (spectrogram_chunk - mean) / (std + 1e-12)  
 
                 # create spectrogram slice; leave first dimension at index 0 as is (16); slice second dimension to only last 100 frames (100 frames * 32 (hop size) = 3200 samples or 200ms);transform to list as I will send it via JSON which doesn'tz support numpy arrays                    
-                spectrogram_slice = standardized_spectrogram[:,-100:].tolist()
+                
+                spectrogram_latest100frames = standardized_spectrogram[:,-100:]
+                accumulated_spec.append(spectrogram_latest100frames)
+                
+                spectrogram_latest100frames = spectrogram_latest100frames.tolist()
 
                 # reshape to 4D nparray, add dimensions at 0 and 1 -> shape [1,1,16,2000]
                 onnx_input_spectrogram = np.expand_dims(standardized_spectrogram, axis=(0,1))
@@ -169,7 +177,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         "params": c50_results["params"].tolist(),
                         "quantiles": c50_results["quantiles"].tolist()
                     },
-                    "spectrogram_slice": spectrogram_slice,
+                    "spectrogram_latest100frames": spectrogram_latest100frames,
                     "inference_time_ms": inference_time_ms
                 }
                 
@@ -191,8 +199,16 @@ async def websocket_endpoint(websocket: WebSocket):
                 # slice buffer by 3200 samples (0.2 seconds), remaining 3.8 seconds will be concatenated with new input when available) // decreased stride vs phase 6
                 audio_buffer = audio_buffer[-60800:]
     
+    except WebSocketDisconnect:
+        logger.info("Client disconnected cleanly.")
+
     except Exception as e:
         logger.exception("Error in Websocket connection: %s", e)
+
+    finally:
+        if len(accumulated_spec) > 0:
+            spec_hot = np.concatenate(accumulated_spec, axis=1) #stack on second dimension; shape is (nmels, time) or (16,100)
+            np.save(BASE_DIR / "models" / "spec_hot.npy", spec_hot)
 
 @app.get("/api/get-upload-url")
 # create presigned URLs
