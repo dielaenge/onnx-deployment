@@ -260,9 +260,9 @@ def create_presigned_upload_url(
 app.mount("/", StaticFiles(directory= BASE_DIR.parent / "src", html=True), name="static")
 
 # LAUNCH ON LOCALHOST
-if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
+#if __name__ == "__main__":
+#    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
 
 # LAUNCH ON AWS - defined port 8080 in ecs.tf
-#if __name__ == "__main__":
-#    uvicorn.run("app.main:app", host="0.0.0.0", port=8080)
+if __name__ == "__main__":
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8080)
