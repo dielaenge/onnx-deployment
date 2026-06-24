@@ -257,7 +257,7 @@ def create_presigned_upload_url(
     return presigned_url_response_json
 
 # Mount the static directory containing index.html and processor.js
-app.mount("/", StaticFiles(directory= BASE_DIR.parent / "src", html=True), name="static")
+app.mount("/", StaticFiles(directory= BASE_DIR.parent.parent / "src", html=True), name="static")
 
 # LAUNCH ON LOCALHOST
 #if __name__ == "__main__":
