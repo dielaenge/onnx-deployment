@@ -75,7 +75,7 @@ resource "aws_iam_role_policy" "github_actions_permissions" {
           "ecr:CompleteLayerUpload",
           "ecr:PutImage"
         ]
-        Resource = "arn:aws:ecr:eu-central-1:*:repository/bape-phase7" #addressed explicitly to avoid dependency applies when running target applies
+        Resource = "arn:aws:ecr:eu-central-1:*:repository/bape-ecr-phase7" #addressed explicitly to avoid dependency applies when running target applies
       },
       {
         # Permission to force a new deployment in ECS
