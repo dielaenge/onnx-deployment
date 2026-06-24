@@ -75,7 +75,7 @@ resource "aws_iam_role_policy" "github_actions_permissions" {
           "ecr:CompleteLayerUpload",
           "ecr:PutImage"
         ]
-        Resource = "arn:aws:ecr:eu-central-1:*:repository/bape-ecr-phase7" #addressed explicitly to avoid dependency applies when running target applies
+        Resource = "arn:aws:ecr:eu-central-1:${data.aws_caller_identity.current.account_id}:repository/bape-ecr-phase7" #addressed explicitly to avoid dependency applies when running target applies
       },
       {
         # Permission to force a new deployment in ECS
@@ -84,7 +84,7 @@ resource "aws_iam_role_policy" "github_actions_permissions" {
           "ecs:UpdateService",
           "ecs:DescribeServices"
         ]
-        Resource = "arn:aws:ecs:eu-central-1:*:service/bape_cluster/bape_ecs_service" #addressed explicitly to avoid dependency applies when running target applies
+        Resource = "arn:aws:ecs:eu-central-1:${data.aws_caller_identity.current.account_id}:service/bape_cluster/bape_ecs_service" #addressed explicitly to avoid dependency applies when running target applies
       }
     ]
   })

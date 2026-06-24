@@ -7,6 +7,10 @@
 data "aws_availability_zones" "available" {
   state = "available"
 }
+# Caller identity
+data "aws_caller_identity" "current" {
+  
+}
 # -------------------------------
 # S3 BUCKET FOR PHASE 7 APP DATA
 # -------------------------------
