@@ -725,8 +725,8 @@ ws.onmessage = function(event) {
     const incomingData = JSON.parse(event.data);
 
     //render spectrogram
-    if (incomingData.spectrogram_slice) {
-        renderSpectrogram(incomingData.spectrogram_slice);
+    if (incomingData.spectrogram_latest100frames) {
+        renderSpectrogram(incomingData.spectrogram_latest100frames);
     }
     const t60Params = incomingData.t60_bapes.params[0].flat();
     const t60Quantiles = incomingData.t60_bapes.quantiles[0].flat();
@@ -758,6 +758,10 @@ ws.onmessage = function(event) {
 
     // unhide result area
     resultArea.classList.remove('hidden');
+
+    // display JSON in frontend
+    jsonResult.innerText = JSON.stringify(incomingData, null, 2);
+
 
     // as we stream every 200ms / 5 data points per second / at 5Hz, we instruct the D3 frontend to render 300 SVG paths per minute, which might lead to a lag
     // to prevent the DOM from breaking under the payload, a 10s rollingHistory is created which instructs the D3 function to only render the last 50 data points / 10 seconds 
