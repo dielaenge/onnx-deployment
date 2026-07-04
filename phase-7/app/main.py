@@ -256,7 +256,7 @@ def create_presigned_upload_url(
         logging.error(e)
         return None
 
-    # The response contains the presigned URL
+    # The response contains the presigned URL and object key
     return presigned_url_response_json
 
 
