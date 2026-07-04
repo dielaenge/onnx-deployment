@@ -96,6 +96,23 @@ graph TB
 
 ```
 
+### **Phase 4: Serverless Lambda Deployment**
+[TBD]
+
+### **Phase 5: Containerized Deployment**
+[TBD]
+
+### **Phase 6: Real-Time Inference Deployment**
+[TBD]
+
+### **Phase 7: Distributed multi-model hot- and cold-path Deployment**
+[TBD]
+
+
+
+---
+---
+
 ### *Detour: Integrating the real BAPE Model*
 
 At the start of phase 3 I was invited to the GitHub repo of the real world PyTorch model we are deploying in this project and were substituting with a dummy model until here. 
