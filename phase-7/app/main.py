@@ -224,9 +224,9 @@ def create_presigned_upload_url(
     :return: JSON response containing upload URL as string and upload file name. If error, returns None.
     """
     
-    BUCKET_NAME = os.environ.get("S3_BUCKET_NAME")
+    BUCKET_NAME = os.environ.get("APP_DATA_BUCKET_NAME")
     REGION_NAME = os.environ.get("AWS_REGION")
-    session_id = str(uuid.uuid4())
+    ws_session_id = str(uuid.uuid4())
 
     s3_client=boto3.client(
         's3',
@@ -242,14 +242,14 @@ def create_presigned_upload_url(
             ClientMethod='put_object',
             Params={
                 "Bucket":BUCKET_NAME,
-                "Key":f"uploads/{session_id}.wav"
+                "Key":f"uploads/{ws_session_id}.wav"
             },
             ExpiresIn=expiration
         )
 
         presigned_url_response_json = {
             "upload_url": upload_url,
-            "object_key": f"uploads/{session_id}.wav",
+            "object_key": f"uploads/{ws_session_id}.wav",
         }
 
     except ClientError as e:
