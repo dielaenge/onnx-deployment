@@ -323,12 +323,17 @@ async function startRecording(){
 };
 
 function stopRecording() {
-    // 1. Stop the microphone recording
+    // Swap button listeners back to start mode
+    micBtn.removeEventListener("click", stopRecording);
+    micBtn.addEventListener("click", startRecording);
+    recText.innerText = "Processing and uploading raw audio...";
+
+    // Stop the microphone recording
     if (typeof micStream !== 'undefined') {
         micStream.getTracks().forEach(track => track.stop());
     }
     
-    // 2. Stop the audio processing environment
+    // Stop the audio processing environment
     if (typeof audioContext !== 'undefined' && audioContext.state !== 'closed') {
         audioContext.close();
         statusText.innerText = "Recording stream closed.";
@@ -336,10 +341,13 @@ function stopRecording() {
         micBtn.classList.add('hidden');
     }
     
-    // 3. Close the WebSocket connection to the server
+    // Close the WebSocket connection to the server
     if (ws.readyState === WebSocket.OPEN) {
         ws.close();
     }
+
+    // trigger cold-path upload
+    uploadRecording();
 };
 
 // UPLOAD ON STOP
