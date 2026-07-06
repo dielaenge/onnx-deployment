@@ -74,6 +74,28 @@ resource "aws_cloudfront_distribution" "bape_phase7_frontend_s3_distribution" {
     }
   }
 
+  ordered_cache_behavior {
+    path_pattern    = "/ws*" # added * to catch WS handshake variations
+    allowed_methods = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods  = ["GET", "HEAD"]
+    cache_policy_id = data.aws_cloudfront_cache_policy.caching_disabled.id
+    #AllViewer origin request policy
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id
+    target_origin_id         = aws_lb.bape_alb.id
+    viewer_protocol_policy   = "redirect-to-https"
+  }
+
+  ordered_cache_behavior {
+    path_pattern    = "/api/*" # catch all api variations, like api/health, api/get-upload-url, …
+    allowed_methods = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods  = ["GET", "HEAD"]
+    cache_policy_id = data.aws_cloudfront_cache_policy.caching_disabled.id
+    #AllViewer origin request policy
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id
+    target_origin_id         = aws_lb.bape_alb.id
+    viewer_protocol_policy   = "redirect-to-https"
+  }
+
   default_cache_behavior {
     allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods   = ["GET", "HEAD"]
@@ -87,17 +109,6 @@ resource "aws_cloudfront_distribution" "bape_phase7_frontend_s3_distribution" {
         forward = "none"
       }
     }
-  }
-
-  ordered_cache_behavior {
-    path_pattern    = "/ws*" # added * to catch WS handshake variations
-    allowed_methods = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods  = ["GET", "HEAD"]
-    cache_policy_id = data.aws_cloudfront_cache_policy.caching_disabled.id
-    #AllViewer origin request policy
-    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id
-    target_origin_id         = aws_lb.bape_alb.id
-    viewer_protocol_policy   = "redirect-to-https"
   }
 
   price_class = "PriceClass_100"
