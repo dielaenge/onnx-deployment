@@ -337,7 +337,7 @@ function stopRecording() {
     if (typeof audioContext !== 'undefined' && audioContext.state !== 'closed') {
         audioContext.close();
         statusText.innerText = "Recording stream closed.";
-        recText.innerText = "Reload page for new inference session or click the microphone button again.";
+        recText.innerText = "Reload page for new inference session.";
         micBtn.classList.add('hidden');
     }
     
