@@ -32,8 +32,12 @@ resource "aws_ecs_task_definition" "task_definition_bape" {
           "value" = "/tmp"
         },
         {
-          "name"  = "APP_BUCKET_NAME",
+          "name"  = "APP_DATA_BUCKET_NAME",
           "value" = aws_s3_bucket.bape_app_data_phase7.id
+        },
+        {
+          "name"  = "AWS_REGION",
+          "value" = data.aws_region.current.name
         },
         {
           "name"  = "UVICORN_HOST",
