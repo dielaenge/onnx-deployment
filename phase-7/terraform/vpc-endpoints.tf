@@ -8,7 +8,7 @@ resource "aws_vpc_endpoint" "s3-gateway" {
   route_table_ids = [aws_route_table.private-traffic.id]
 
   tags = {
-    Name  = "bape-vpc-s3-gw"
+    Name = "bape-vpc-s3-gw"
   }
 }
 
@@ -22,7 +22,7 @@ resource "aws_vpc_endpoint" "ecr-api-interface" {
   security_group_ids  = [aws_security_group.vpc_endpoint_sg.id]
 
   tags = {
-    Name  = "bape-vpc-ecr-api-interface"
+    Name = "bape-vpc-ecr-api-interface"
   }
 }
 
@@ -36,7 +36,7 @@ resource "aws_vpc_endpoint" "ecr-dkr-interface" {
   security_group_ids  = [aws_security_group.vpc_endpoint_sg.id]
 
   tags = {
-    Name  = "bape-vpc-ecr-dkr-interface"
+    Name = "bape-vpc-ecr-dkr-interface"
   }
 }
 
@@ -50,7 +50,7 @@ resource "aws_vpc_endpoint" "cloudwatch-logs-interface" {
   security_group_ids  = [aws_security_group.vpc_endpoint_sg.id]
 
   tags = {
-    Name  = "bape-vpc-cw-logs-interface"
+    Name = "bape-vpc-cw-logs-interface"
   }
 }
 # CloudWatch Log Group
@@ -59,6 +59,6 @@ resource "aws_cloudwatch_log_group" "log_group_ecs_bape_inference_phase7" {
   name = "log-group-ecs-bape-inference-phase7"
 
   tags = {
-    Name  = "log_group_ecs_bape_inference"
+    Name = "log_group_ecs_bape_inference"
   }
 }

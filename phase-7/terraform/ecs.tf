@@ -36,12 +36,12 @@ resource "aws_ecs_task_definition" "task_definition_bape" {
           "value" = aws_s3_bucket.bape_app_data_phase7.id
         },
         {
-          "name" = "UVICORN_HOST",
+          "name"  = "UVICORN_HOST",
           "value" = "0.0.0.0"
 
         },
         {
-          "name" = "UVICORN_PORT",
+          "name"  = "UVICORN_PORT",
           "value" = "8080"
         }
       ]
@@ -90,7 +90,7 @@ resource "aws_ecs_service" "bape_service" {
     container_port   = 8080
   }
 
-    tags = {
+  tags = {
     Name = "bape_ecs_service"
   }
 

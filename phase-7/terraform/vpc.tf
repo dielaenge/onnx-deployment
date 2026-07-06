@@ -8,7 +8,7 @@ resource "aws_vpc" "bape-vpc" {
   enable_dns_support   = true
 
   tags = {
-    Name  = "bape-vpc"
+    Name = "bape-vpc"
   }
 }
 
@@ -17,7 +17,7 @@ resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.bape-vpc.id
 
   tags = {
-    Name  = "bape-vpc-igw"
+    Name = "bape-vpc-igw"
   }
 }
 
@@ -27,7 +27,7 @@ resource "aws_subnet" "pub-sn-A" {
   cidr_block        = "10.0.1.0/24"
   availability_zone = data.aws_availability_zones.available.names[0]
   tags = {
-    Name  = "bape-vpc-pub-sn-A"
+    Name = "bape-vpc-pub-sn-A"
   }
 }
 
@@ -36,7 +36,7 @@ resource "aws_subnet" "pub-sn-B" {
   cidr_block        = "10.0.2.0/24"
   availability_zone = data.aws_availability_zones.available.names[1]
   tags = {
-    Name  = "bape-vpc-pub-sn-B"
+    Name = "bape-vpc-pub-sn-B"
   }
 }
 
@@ -45,7 +45,7 @@ resource "aws_subnet" "prv-sn-A" {
   cidr_block        = "10.0.3.0/24"
   availability_zone = data.aws_availability_zones.available.names[0]
   tags = {
-    Name  = "bape-vpc-prv-sn-A"
+    Name = "bape-vpc-prv-sn-A"
   }
 }
 
@@ -54,6 +54,6 @@ resource "aws_subnet" "prv-sn-B" {
   cidr_block        = "10.0.4.0/24"
   availability_zone = data.aws_availability_zones.available.names[1]
   tags = {
-    Name  = "bape-vpc-prv-sn-B"
+    Name = "bape-vpc-prv-sn-B"
   }
 }

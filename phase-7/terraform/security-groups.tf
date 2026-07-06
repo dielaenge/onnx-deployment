@@ -8,7 +8,7 @@ resource "aws_security_group" "vpc_endpoint_sg" {
   vpc_id      = aws_vpc.bape-vpc.id
 
   tags = {
-    Name  = "vpc_endpoint_sg"
+    Name = "vpc_endpoint_sg"
   }
 }
 # ingress rule: allow incoming HTTPS traffic from Fargate Container Security Group
@@ -20,7 +20,7 @@ resource "aws_vpc_security_group_ingress_rule" "vpc_endpoint_ingress" {
   to_port                      = 443
 
   tags = {
-    Name  = "vpc_endpoint_sg_ingress"
+    Name = "vpc_endpoint_sg_ingress"
   }
 }
 # NO EGRESS rule because *END*points are servers; they don't initiate connections
@@ -32,7 +32,7 @@ resource "aws_security_group" "ecs_fargate_containers_sg" {
   vpc_id      = aws_vpc.bape-vpc.id
 
   tags = {
-    Name  = "ecs_fargate_containers_sg"
+    Name = "ecs_fargate_containers_sg"
   }
 }
 # ingress: allow incoming traffic from ALB Security Group on port 8080 (defined in dockerfile)
@@ -45,7 +45,7 @@ resource "aws_vpc_security_group_ingress_rule" "ecs_fargate_ingress" {
   to_port                      = 8080
 
   tags = {
-    Name  = "ecs_fargate_sg_ingress"
+    Name = "ecs_fargate_sg_ingress"
   }
 }
 # egress: allow outgoing traffic to the vpc endpoints
@@ -58,7 +58,7 @@ resource "aws_vpc_security_group_egress_rule" "ecs_fargate_egress" {
   to_port                      = 443
 
   tags = {
-    Name  = "ecs_fargate_sg_egress"
+    Name = "ecs_fargate_sg_egress"
   }
 }
 # egress: allow traffic to S3 Gateway
@@ -76,6 +76,6 @@ resource "aws_vpc_security_group_egress_rule" "ecs_fargate_s3_egress" {
   to_port        = 443
 
   tags = {
-    Name  = "ecs_fargate_s3_sg_egress"
+    Name = "ecs_fargate_s3_sg_egress"
   }
 }

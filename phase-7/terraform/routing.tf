@@ -11,7 +11,7 @@ resource "aws_route_table" "all-traffic-to-igw" {
   }
 
   tags = {
-    Name  = "bape-vpc-route-table"
+    Name = "bape-vpc-route-table"
   }
 }
 
@@ -30,7 +30,7 @@ resource "aws_route_table" "private-traffic" {
   vpc_id = aws_vpc.bape-vpc.id
 
   tags = {
-    Name  = "bape-private-traffic-route-table"
+    Name = "bape-private-traffic-route-table"
   }
 }
 # associate `private-traffic` with private subnets

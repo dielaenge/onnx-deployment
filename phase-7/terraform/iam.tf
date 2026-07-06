@@ -19,7 +19,7 @@ resource "aws_iam_role" "ecs_task_execution_role" {
     }
   )
   tags = {
-    Name  = "bape_ecs_task_execution_role"
+    Name = "bape_ecs_task_execution_role"
   }
 }
 
@@ -46,7 +46,7 @@ resource "aws_iam_role" "ecs_task_role" {
     }
   )
   tags = {
-    Name  = "bape-task-role"
+    Name = "bape-task-role"
   }
 }
 

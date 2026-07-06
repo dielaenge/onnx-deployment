@@ -2,14 +2,14 @@
 
 provider "aws" {
 
-    region = "eu-central-1"
+  region = "eu-central-1"
 
-    default_tags {
-      tags = {
-        Phase = "phase7"
-        ManagedBy = "Terraform"
-        AWSEnvironment = "dev"
-      }
+  default_tags {
+    tags = {
+      Phase          = "phase7"
+      ManagedBy      = "Terraform"
+      AWSEnvironment = "dev"
     }
+  }
 
 }
