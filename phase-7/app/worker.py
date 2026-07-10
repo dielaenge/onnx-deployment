@@ -8,7 +8,7 @@ import subprocess
 import urllib.parse
 import wave
 
-from audio_utils import MelSpectrogram
+from .audio_utils import MelSpectrogram
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -23,14 +23,9 @@ s3_client = boto3.client('s3')
 
 # GET ENV VARIABLES
 queue_url = os.environ.get('SQS_QUEUE_URL')
-s3_bucket = os.environ.get('S3_BUCKET_NAME')
+app_data_bucket = os.environ.get('APP_DATA_BUCKET_NAME')
 
-# Empty path and key variables
-raw_audio_path = None
-processed_audio_path = None
-full_spectrogram_path = None 
-s3_processed_audio_object_key = None
-s3_spectrogram_object_key = None
+
 
 # HELPER FUNCTIONS
 # Download raw file from S3
@@ -74,8 +69,8 @@ def generate_spectrogram(processed_audio_path:str, full_spectrogram_path:str):
         np.save(full_spectrogram_path, full_spectrogram_data)
 # Upload wav and spectrogram to S3
 def upload_assets(bucket:str, processed_audio_path:str, processed_audio_key:str, full_spectrogram_path:str, spectrogram_key:str):
-    s3_client.upload_file(bucket, processed_audio_path, processed_audio_key)
-    s3_client.upload_file(bucket, full_spectrogram_path, spectrogram_key)
+    s3_client.upload_file(processed_audio_path, bucket, processed_audio_key)
+    s3_client.upload_file(full_spectrogram_path, bucket,  spectrogram_key)
 
 # MAIN FUNCTION
 def main():
@@ -99,6 +94,13 @@ def main():
             messages = response.get('Messages', [])
             
             for message in messages:
+                
+                # Empty path and key variables
+                raw_audio_path = None
+                processed_audio_path = None
+                full_spectrogram_path = None 
+                s3_processed_audio_object_key = None
+                s3_spectrogram_object_key = None
                 
                 try:    
                     # Load SQS Mesagge (loads = load string) as JSON
@@ -136,7 +138,7 @@ def main():
                     )
 
                     # DOWNLOAD
-                    download_raw_audio(s3_bucket, object_key, raw_audio_path)
+                    download_raw_audio(app_data_bucket, object_key, raw_audio_path)
                     
                     # Normalize
                     normalize_raw_audio(raw_audio_path, processed_audio_path)
@@ -145,7 +147,7 @@ def main():
                     generate_spectrogram(processed_audio_path=processed_audio_path, full_spectrogram_path=full_spectrogram_path)
 
                     # UPLOAD ASSETS     
-                    upload_assets(bucket=s3_bucket, processed_audio_path=processed_audio_path, processed_audio_key=s3_processed_audio_object_key, full_spectrogram_path=full_spectrogram_path, spectrogram_key=s3_spectrogram_object_key)
+                    upload_assets(bucket=app_data_bucket, processed_audio_path=processed_audio_path, processed_audio_key=s3_processed_audio_object_key, full_spectrogram_path=full_spectrogram_path, spectrogram_key=s3_spectrogram_object_key)
 
                     # CLEANUP
                     # 4. Delete received message from queue
