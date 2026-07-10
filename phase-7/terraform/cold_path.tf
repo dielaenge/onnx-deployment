@@ -58,7 +58,8 @@ resource "aws_s3_bucket_cors_configuration" "cors_config_phase7_app_data_bucket"
     allowed_methods = ["PUT"]
     allowed_origins = [
       "https://${aws_cloudfront_distribution.bape_phase7_frontend_s3_distribution.domain_name}",
-      "127.0.0.1:8000"
+      "http://127.0.0.1:8000",
+      "http://localhost:8000"
     ]
     expose_headers  = []
     max_age_seconds = 3000
