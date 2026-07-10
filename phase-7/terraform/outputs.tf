@@ -14,3 +14,8 @@ output "github_actions_role_arn" {
   description = "GitHub Actions IAM Role ARN. Copy into GitHub Actions YAML:"
   value       = aws_iam_role.github_actions_role.arn
 }
+
+output "sqs_url" {
+  description = "SQS queue URL for cold path."
+  value       = aws_sqs_queue.bape_cold_path_queue.url
+}
