@@ -137,9 +137,9 @@ async def websocket_endpoint(websocket: WebSocket):
             if len(audio_buffer) >= 64000:
                 
                 # Initialize inference loop
-                session_id = str(uuid.uuid4())
+                hot_path_session_id = str(uuid.uuid4())
                 logger.info("%s samples available.", len(audio_buffer))
-                logger.info("session_id: %s", session_id)
+                logger.info("session_id: %s", hot_path_session_id)
                 
                 spectrogram_chunk = melspec_preprocessor(audio_buffer) # shape [16, 2000]
 
@@ -187,7 +187,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 # Log session data
                 log_data = {
                     "event": "inference_complete",
-                    "session_id": session_id,
+                    "session_id": hot_path_session_id,
                     "inference_time_ms": inference_time_ms,
                     "shape": onnx_input_spectrogram.shape,
                     "t60_estimate_1khz_sample": t60_results["params"].tolist()[0][0],
@@ -226,7 +226,7 @@ def create_presigned_upload_url(
     
     BUCKET_NAME = os.environ.get("APP_DATA_BUCKET_NAME")
     REGION_NAME = os.environ.get("AWS_REGION")
-    ws_session_id = str(uuid.uuid4())
+    cold_path_session_id = str(uuid.uuid4())
 
     s3_client=boto3.client(
         's3',
@@ -242,14 +242,14 @@ def create_presigned_upload_url(
             ClientMethod='put_object',
             Params={
                 "Bucket":BUCKET_NAME,
-                "Key":f"uploads/{ws_session_id}.wav"
+                "Key":f"uploads/{cold_path_session_id}.wav"
             },
             ExpiresIn=expiration
         )
 
         presigned_url_response_json = {
             "upload_url": upload_url,
-            "object_key": f"uploads/{ws_session_id}.wav",
+            "object_key": f"uploads/{cold_path_session_id}.wav",
         }
 
     except ClientError as e:
@@ -263,7 +263,7 @@ def create_presigned_upload_url(
 # check if app is run locally or on cloud, either mount from local static directory or skip and serve frontend from CloudFront / S3
 if static_dir.exists() and static_dir.is_dir():
     # Mount the static directory containing index.html and processor.js
-    app.mount("/", StaticFiles(directory= static_dir / "src", html=True), name="static")
+    app.mount("/", StaticFiles(directory= static_dir , html=True), name="static")
     logger.info("/src directory found. Running in Local Dev Mode.")
 else: 
     logger.info("Static directory '/src' not found. Skipping static mount (Cloud Production Mode).")
