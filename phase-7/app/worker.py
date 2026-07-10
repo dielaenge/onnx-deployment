@@ -7,6 +7,7 @@ import time
 import subprocess
 import urllib.parse
 import wave
+import shutil
 
 from .audio_utils import MelSpectrogram
 
@@ -145,6 +146,10 @@ def main():
 
                     # Generate spectrogram
                     generate_spectrogram(processed_audio_path=processed_audio_path, full_spectrogram_path=full_spectrogram_path)
+
+                    # Save a copy of the spectrogram to models/ folder before any uploads or cleanups
+                    shutil.copy(full_spectrogram_path, "app/models/spec_cold.npy")
+                    logger.info("Saved a local copy of cold-path spectrogram for parity verification.")
 
                     # UPLOAD ASSETS     
                     upload_assets(bucket=app_data_bucket, processed_audio_path=processed_audio_path, processed_audio_key=s3_processed_audio_object_key, full_spectrogram_path=full_spectrogram_path, spectrogram_key=s3_spectrogram_object_key)
