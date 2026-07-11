@@ -109,12 +109,12 @@ def main():
 
                     # Parse Message and event notification to variables
                     event_message = body['Records'][0] # event message structure: https://docs.aws.amazon.com/AmazonS3/latest/userguide/notification-content-structure.html
-                    object_key = urllib.parse.unquote_plus(event_message['s3']['object']['key'])
+                    object_key = urllib.parse.unquote_plus(event_message['s3']['object']['key']) # decodes URL-encoded strings by replacing %xx escape sequences with their single-character equivalents and replacing + signs with spaces; primarily used for decoding HTML form values and URL query parameters where spaces are encoded as +
                     bucket_name = event_message['s3']['bucket']['name']
                     receipt_handle = message['ReceiptHandle'] # unique identifier of SQS message
 
                     file_name = os.path.basename(object_key) # keeps filename with whatever file extension – maybe this is redundant and I could go from object_key straight to base_name
-                    base_name, _ = os.path.splitext(file_name) # split base name and file extension --> returns a tuple
+                    base_name = os.path.splitext(file_name[0]) # split base name and file extension --> splitext returns a tuple, but file extension is not required
                     
                     # set path variables for local processing on Linux
                     raw_audio_path=f"/tmp/raw_{file_name}"
@@ -125,7 +125,7 @@ def main():
                     s3_processed_audio_object_key = f"processed/{base_name}.wav"
                     s3_spectrogram_object_key = f"spectrograms/{base_name}.npy"
 
-                    logger.info("SQS Message loaded and parsed:\nobject_key:%s\nbucket_name: %s\nreceipt_handle: %s\nfile_name: %s\nbase_name: %s\nraw_audio_path: %s\nprocessed_audio_path: %s\nfull_spectrogram_path: %s\ns3_processed_audio_object_key: %s\ns3_spectrogram_object_key: %s", 
+                    logger.info("\n\n----------------------------------------\n\nSQS Message loaded and parsed:\n\nobject_key:%s\nbucket_name: %s\nreceipt_handle: %s\nfile_name: %s\nbase_name: %s\nraw_audio_path: %s\nprocessed_audio_path: %s\nfull_spectrogram_path: %s\ns3_processed_audio_object_key: %s\ns3_spectrogram_object_key: %s\n\n----------------------------------------", 
                     object_key, 
                     bucket_name,
                     receipt_handle, 
@@ -174,13 +174,16 @@ def main():
                 
                 finally:
                     # Cleanup: Look for any uploaded and normalized files and delete them
-                    # If we don't delete files, /tmp is filled up to its 512MB limit and Lambda crashes
+                    # If we don't delete files, /tmp is filled up 
                     if raw_audio_path and os.path.exists(raw_audio_path):
                         os.remove(raw_audio_path)
+                        logger.info("raw_audio_path deleted from %s .", raw_audio_path)
                     if processed_audio_path and os.path.exists(processed_audio_path):
                         os.remove(processed_audio_path)
+                        logger.info("processed_audio_path deleted from %s .", processed_audio_path)
                     if full_spectrogram_path and os.path.exists(full_spectrogram_path):
                         os.remove(full_spectrogram_path)
+                        logger.info("full_spectrogram_path deleted from %s .", full_spectrogram_path)
                     
 
         except Exception as message_error:
