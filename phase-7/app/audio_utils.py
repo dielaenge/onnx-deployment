@@ -23,7 +23,7 @@ class MelSpectrogram:
         sr: float = 16000.0, 
         n_fft: int = 64, 
         hop_size: int = 16,
-        n_mels: int = 17, 
+        n_mels: int = 16, 
         fmin: float = 100.0, 
         fmax: float = 8000,
         power: float = 2.0, 

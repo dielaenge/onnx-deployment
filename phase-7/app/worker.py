@@ -114,7 +114,7 @@ def main():
                     receipt_handle = message['ReceiptHandle'] # unique identifier of SQS message
 
                     file_name = os.path.basename(object_key) # keeps filename with whatever file extension – maybe this is redundant and I could go from object_key straight to base_name
-                    base_name = os.path.splitext(file_name[0]) # split base name and file extension --> splitext returns a tuple, but file extension is not required
+                    base_name = os.path.splitext(file_name)[0] # split base name and file extension --> splitext returns a tuple, but file extension is not required
                     
                     # set path variables for local processing on Linux
                     raw_audio_path=f"/tmp/raw_{file_name}"
