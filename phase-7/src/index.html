@@ -233,7 +233,7 @@ const host = window.location.host;
 const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
 
 // Construct the URL
-const wsUrl = `${protocol}${host}/ws`;
+const wsUrl = `${protocol}${host}/ws?session_id=${sessionId}`;
 
 console.log("Connecting to WebSocket at:", wsUrl);
 const ws = new WebSocket(wsUrl);
@@ -271,11 +271,12 @@ const colorScale = d3.scaleSequential(d3.interpolateWarm)
 
 // RECORDING LOGIC
 async function startRecording(){
+    const sessionId = crypto.randomUUID()
     // inform user
-    statusText.innerText = `Inference session started. First results in 4 seconds…`;
+    statusText.innerText = `Inference session ${sessionId} started. First results in 4 seconds…`;
     let countDown = 3;        
     const countDownTimer = setInterval(() => {
-        statusText.innerText = `Inference session started. First results in ${countDown} seconds…`;
+        statusText.innerText = `Inference session ${sessionId} started. First results in ${countDown} seconds…`;
         countDown--;
         if (countDown < 0) {
             clearInterval(countDownTimer);
@@ -360,7 +361,7 @@ async function uploadRecording() {
         const wavBlob = encodeWav(offlineAudioBuffer, 16000);
 
         console.log("Fetching presigned URL …");
-        const response = await fetch("/api/get-upload-url");
+        const response = await fetch("/api/get-upload-url?session_id=${sessionId}");
         const { upload_url, object_key } = await response.json();
         
         console.log("Uploading WAV directly to S3...");
