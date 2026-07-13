@@ -211,7 +211,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     finally:
         if len(accumulated_spec) > 0:
             spec_hot = np.concatenate(accumulated_spec, axis=1) #stack on second dimension; shape is (nmels, time) or (16,100)
-            np.save(BASE_DIR / "models" / f"spec_hot_{ws_session_id}.npy", spec_hot)
+            np.save(BASE_DIR / "models" / f"spec_hot_{session_id}.npy", spec_hot)
 
 @app.get("/api/get-upload-url")
 # create presigned URLs
