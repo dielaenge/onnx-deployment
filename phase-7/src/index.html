@@ -240,6 +240,7 @@ const ws = new WebSocket(wsUrl);
 
 let audioContext;
 let micStream;
+let sessionId;
 
 // liveStreamingBuffer will be used to store 32000 samples / 2 seconds of audio and then send it
 let liveStreamingBuffer = [];
@@ -271,7 +272,7 @@ const colorScale = d3.scaleSequential(d3.interpolateWarm)
 
 // RECORDING LOGIC
 async function startRecording(){
-    const sessionId = crypto.randomUUID()
+    sessionId = crypto.randomUUID()
     // inform user
     statusText.innerText = `Inference session ${sessionId} started. First results in 4 seconds…`;
     let countDown = 3;        
