@@ -66,8 +66,13 @@ def generate_spectrogram(processed_audio_path:str, full_spectrogram_path:str):
         audio_array = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768 #16bit integers range from 32768 to -32768; division sets range to [-1,1]
         
         full_spectrogram_data = spectrogram_processor(audio_array)
+
+        #standardize
+        mean = full_spectrogram_data.mean()
+        std = full_spectrogram_data.std()
+        standardized_cold_data = (full_spectrogram_data - mean) / (std + 1e-12)
         
-        np.save(full_spectrogram_path, full_spectrogram_data)
+        np.save(full_spectrogram_path, standardized_cold_data)
 # Upload wav and spectrogram to S3
 def upload_assets(bucket:str, processed_audio_path:str, processed_audio_key:str, full_spectrogram_path:str, spectrogram_key:str):
     s3_client.upload_file(processed_audio_path, bucket, processed_audio_key)
@@ -125,8 +130,9 @@ def main():
                     s3_processed_audio_object_key = f"processed/{base_name}.wav"
                     s3_spectrogram_object_key = f"spectrograms/{base_name}.npy"
 
-                    logger.info("\n\n----------------------------------------\n\nSQS Message loaded and parsed:\n\nobject_key:%s\nbucket_name: %s\nreceipt_handle: %s\nfile_name: %s\nbase_name: %s\nraw_audio_path: %s\nprocessed_audio_path: %s\nfull_spectrogram_path: %s\ns3_processed_audio_object_key: %s\ns3_spectrogram_object_key: %s\n\n----------------------------------------", 
+                    logger.info("\n\n----------------------------------------\n\nSQS Message loaded and parsed:\n\nobject_key:%s\nmessage_id:%s\n\nbucket_name: %s\nreceipt_handle: %s\nfile_name: %s\nbase_name: %s\nraw_audio_path: %s\nprocessed_audio_path: %s\nfull_spectrogram_path: %s\ns3_processed_audio_object_key: %s\ns3_spectrogram_object_key: %s\n\n----------------------------------------", 
                     object_key, 
+                    message['MessageId'],
                     bucket_name,
                     receipt_handle, 
                     file_name, 
