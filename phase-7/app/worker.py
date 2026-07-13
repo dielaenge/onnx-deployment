@@ -148,8 +148,8 @@ def main():
                     generate_spectrogram(processed_audio_path=processed_audio_path, full_spectrogram_path=full_spectrogram_path)
 
                     # Save a copy of the spectrogram to models/ folder before any uploads or cleanups
-                    shutil.copy(full_spectrogram_path, "app/models/spec_cold.npy")
-                    logger.info("Saved a local copy of cold-path spectrogram for parity verification.")
+                    shutil.copy(full_spectrogram_path, f"app/models/spec_cold_{base_name}.npy")
+                    logger.info("Saved a local copy of cold-path spectrogram for parity verification under app/models/spec_cold_%s.npy", base_name)
 
                     # UPLOAD ASSETS     
                     upload_assets(bucket=app_data_bucket, processed_audio_path=processed_audio_path, processed_audio_key=s3_processed_audio_object_key, full_spectrogram_path=full_spectrogram_path, spectrogram_key=s3_spectrogram_object_key)
