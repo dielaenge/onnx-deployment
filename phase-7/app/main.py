@@ -106,7 +106,7 @@ async def get_processor():
 
 # establish websocket connection
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, session_id: str):
     await websocket.accept()
     logger.info("Client connected via WebSocket.")
     
@@ -137,9 +137,9 @@ async def websocket_endpoint(websocket: WebSocket):
             if len(audio_buffer) >= 64000:
                 
                 # Initialize inference loop
-                hot_path_session_id = str(uuid.uuid4())
+                ws_session_id = str(uuid.uuid4())
                 logger.info("%s samples available.", len(audio_buffer))
-                logger.info("session_id: %s", hot_path_session_id)
+                logger.info("ws_session_id: %s", ws_session_id)
                 
                 spectrogram_chunk = melspec_preprocessor(audio_buffer) # shape [16, 2000]
 
@@ -187,7 +187,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 # Log session data
                 log_data = {
                     "event": "inference_complete",
-                    "session_id": hot_path_session_id,
+                    "ws_session_id": ws_session_id,
                     "inference_time_ms": inference_time_ms,
                     "shape": onnx_input_spectrogram.shape,
                     "t60_estimate_1khz_sample": t60_results["params"].tolist()[0][0],
@@ -211,11 +211,12 @@ async def websocket_endpoint(websocket: WebSocket):
     finally:
         if len(accumulated_spec) > 0:
             spec_hot = np.concatenate(accumulated_spec, axis=1) #stack on second dimension; shape is (nmels, time) or (16,100)
-            np.save(BASE_DIR / "models" / "spec_hot.npy", spec_hot)
+            np.save(BASE_DIR / "models" / f"spec_hot_{ws_session_id}.npy", spec_hot)
 
 @app.get("/api/get-upload-url")
 # create presigned URLs
 def create_presigned_upload_url(
+    session_id: str,
     expiration=300
 ):
     """Generate a presigned URL to share an S3 object
@@ -226,7 +227,6 @@ def create_presigned_upload_url(
     
     BUCKET_NAME = os.environ.get("APP_DATA_BUCKET_NAME")
     REGION_NAME = os.environ.get("AWS_REGION")
-    cold_path_session_id = str(uuid.uuid4())
 
     s3_client=boto3.client(
         's3',
@@ -242,14 +242,15 @@ def create_presigned_upload_url(
             ClientMethod='put_object',
             Params={
                 "Bucket":BUCKET_NAME,
-                "Key":f"uploads/{cold_path_session_id}.wav"
+                "Key":f"uploads/{session_id}.wav"
             },
             ExpiresIn=expiration
         )
 
         presigned_url_response_json = {
             "upload_url": upload_url,
-            "object_key": f"uploads/{cold_path_session_id}.wav",
+            "object_key": f"uploads/{session_id}.wav",
+            "session_id": session_id 
         }
 
     except ClientError as e:
