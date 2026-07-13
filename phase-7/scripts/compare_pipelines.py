@@ -1,8 +1,13 @@
 import numpy as np
+from pathlib import Path
+
+# Identify Base Directory
+SCRIPTS_DIR = Path(__file__).resolve().parent
+BASE_DIR = SCRIPTS_DIR.parent
 
 # 1. Load both arrays
-spec_hot = np.load("../app/models/spec_hot.npy")
-spec_cold = np.load("../app/models/spec_cold.npy")
+spec_hot = np.load(BASE_DIR / "app" / "models" / "spec_hot.npy")
+spec_cold = np.load(BASE_DIR / "app" / "models" / "spec_cold.npy")
 
 print(f"Hot Spectrogram Shape:  {spec_hot.shape}")
 print(f"Cold Spectrogram Shape: {spec_cold.shape}")
