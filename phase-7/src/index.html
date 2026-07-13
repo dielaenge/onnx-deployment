@@ -227,6 +227,8 @@ const resultArea = document.getElementById('result-area');
 // Get the current hostname (to solve switching between local and cloud deployment)
 const host = window.location.host;
 
+let sessionId = crypto.randomUUID();
+
 // Find out the protocol
 // …if on HTTPS/CloudFront, WSS is required
 // …or else (on HTTP/local), WS is required
@@ -240,7 +242,7 @@ const ws = new WebSocket(wsUrl);
 
 let audioContext;
 let micStream;
-let sessionId;
+
 
 // liveStreamingBuffer will be used to store 32000 samples / 2 seconds of audio and then send it
 let liveStreamingBuffer = [];
@@ -272,7 +274,6 @@ const colorScale = d3.scaleSequential(d3.interpolateWarm)
 
 // RECORDING LOGIC
 async function startRecording(){
-    sessionId = crypto.randomUUID()
     // inform user
     statusText.innerText = `Inference session ${sessionId} started. First results in 4 seconds…`;
     let countDown = 3;        
@@ -362,7 +363,7 @@ async function uploadRecording() {
         const wavBlob = encodeWav(offlineAudioBuffer, 16000);
 
         console.log("Fetching presigned URL …");
-        const response = await fetch("/api/get-upload-url?session_id=${sessionId}");
+        const response = await fetch(`/api/get-upload-url?session_id=${sessionId}`);
         const { upload_url, object_key } = await response.json();
         
         console.log("Uploading WAV directly to S3...");
