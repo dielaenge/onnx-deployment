@@ -59,20 +59,48 @@ def normalize_raw_audio(input_path: str, output_path:str):
     )
 # Generate spectrogram
 def generate_spectrogram(processed_audio_path:str, full_spectrogram_path:str):
-    spectrogram_processor = MelSpectrogram()
+    # initialized with same arguments as in main.py
+    spectrogram_processor = MelSpectrogram(
+        sr=16000, 
+        n_fft=64, 
+        hop_size=32, 
+        n_mels=16, 
+        fmin=20, 
+        fmax=8000, 
+        power=2.0, 
+        log_mag=True
+    )
 
     with wave.open(processed_audio_path, 'rb') as w:
         frames = w.readframes(w.getnframes())
         audio_array = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768 #16bit integers range from 32768 to -32768; division sets range to [-1,1]
         
-        full_spectrogram_data = spectrogram_processor(audio_array)
+        raw_spectrogram = spectrogram_processor(audio_array)
+        total_frames = raw_spectrogram.shape[1] # get number of frames
 
-        #standardize
-        mean = full_spectrogram_data.mean()
-        std = full_spectrogram_data.std()
-        standardized_cold_data = (full_spectrogram_data - mean) / (std + 1e-12)
-        
-        np.save(full_spectrogram_path, standardized_cold_data)
+        local_standardized_slices = []
+
+        # slice raw specctrogram into 200ms slices, calculate mean, standard deviation 
+        for k in range (0, total_frames):
+            start = k * 100
+            end = start + 2001
+
+            if end > total_frames:
+                break
+            
+            local_window = raw_spectrogram[:, start:end] # select all rows, select columns from start up to (but not including) end
+
+            local_mean = local_window.mean()
+            local_std = local_window.std()
+
+            last_100_frames = raw_spectrogram[:, end-100:end] # select all rows, select columns from end-100 up to (but not including) end
+            standardized_slice = (last_100_frames - local_mean) / (local_std + 1e-12) # standardize
+
+            local_standardized_slices.append(standardized_slice)
+
+        locally_standardized_data = np.concatenate(local_standardized_slices, axis=1) #concatenate on time axis (16, N*100)
+        np.save(full_spectrogram_path, locally_standardized_data
+                )
 # Upload wav and spectrogram to S3
 def upload_assets(bucket:str, processed_audio_path:str, processed_audio_key:str, full_spectrogram_path:str, spectrogram_key:str):
     s3_client.upload_file(processed_audio_path, bucket, processed_audio_key)
