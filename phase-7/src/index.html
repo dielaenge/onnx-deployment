@@ -364,7 +364,7 @@ async function uploadRecording() {
 
         console.log("Fetching presigned URL …");
         const response = await fetch(`/api/get-upload-url?session_id=${sessionId}`);
-        const { upload_url, object_key } = await response.json();
+        const { upload_url, object_key, session_id } = await response.json();
         
         console.log("Uploading WAV directly to S3...");
         await fetch(upload_url, {
@@ -372,7 +372,7 @@ async function uploadRecording() {
             headers: { "Content-Type": "audio/wav" },
             body: wavBlob
         });
-        console.log("SUCCESS: WAV uploaded to S3.");
+        console.log(`SUCCESS: WAV uploaded to S3 for Session ID: ${session_id}`);
         
         // Reset the buffer for the next session
         offlineAudioBuffer = [];
