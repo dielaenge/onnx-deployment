@@ -53,8 +53,22 @@ resource "aws_vpc_endpoint" "cloudwatch-logs-interface" {
     Name = "bape-vpc-cw-logs-interface"
   }
 }
-# CloudWatch Log Group
 
+# SQS Interface Endpoint
+resource "aws_vpc_endpoint" "sqs_interface" {
+  vpc_id              = aws_vpc.bape-vpc.id
+  service_name        = "com.amazonaws.eu-central-1.sqs"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = [aws_subnet.prv-sn-A.id, aws_subnet.prv-sn-B.id]
+  private_dns_enabled = true
+  security_group_ids  = [aws_security_group.vpc_endpoint_sg.id]
+
+  tags = {
+    Name = "bape-vpc-cw-logs-interface"
+  }
+}
+
+# CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "log_group_ecs_bape_inference_phase7" {
   name = "log-group-ecs-bape-inference-phase7"
 
