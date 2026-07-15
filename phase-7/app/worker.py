@@ -140,6 +140,17 @@ def main():
                     # Load SQS Mesagge (loads = load string) as JSON
                     body = json.loads(message["Body"])
 
+                    # detect non-S3 event notification messages
+                    if "Records" not in body:
+                        # log non-message
+                        logger.info("Non-S3 or Test event message detected (MessageId: %s). Discarding from queue.", message['MessageId'])
+                        # delete non-message
+                        sqs_client.delete_message(
+                            QueueUrl=queue_url,
+                            ReceiptHandle=message['ReceiptHandle']
+                        )
+                        continue #proceed to next message
+
                     # Parse Message and event notification to variables
                     event_message = body['Records'][0] # event message structure: https://docs.aws.amazon.com/AmazonS3/latest/userguide/notification-content-structure.html
                     object_key = urllib.parse.unquote_plus(event_message['s3']['object']['key']) # decodes URL-encoded strings by replacing %xx escape sequences with their single-character equivalents and replacing + signs with spaces; primarily used for decoding HTML form values and URL query parameters where spaces are encoded as +
