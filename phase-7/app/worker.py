@@ -200,11 +200,9 @@ def main():
                 except subprocess.CalledProcessError as e:
                     # Capture FFmpeg stderr (Standard Error) for debugging
                     logging.error(f"FFmpeg failed: {e.stderr.decode()}")
-                    raise RuntimeError(f"Could not process audio file: {e.stderr.decode()}")
                 
-                except Exception as e:
-                    logging.error(f"Audio processing error: {str(e)}")
-                    raise e
+                except Exception as message_error:
+                    logger.error("Failed to process message %s: %s", message['MessageId'], message_error)
                 
                 finally:
                     # Cleanup: Look for any uploaded and normalized files and delete them
@@ -218,10 +216,6 @@ def main():
                     if full_spectrogram_path and os.path.exists(full_spectrogram_path):
                         os.remove(full_spectrogram_path)
                         logger.info("full_spectrogram_path deleted from %s .", full_spectrogram_path)
-                    
-
-        except Exception as message_error:
-            logger.error("Failed to process message %s: %s", message['MessageId'], message_error)
                     
         except Exception as system_error:
                     logger.error("SQS polling error / global SQS connection issues: %s", system_error)
