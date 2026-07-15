@@ -16,7 +16,7 @@ resource "aws_sqs_queue_policy" "bape_cold_path_queue_policy" {
     Version = "2012-10-17" # !! Important !!
 
     Statement = [{
-      Sid    = "ALlow S3 bucket to get and send messages"
+      Sid    = "Allow S3 bucket to get and send messages"
       Effect = "Allow"
 
       Principal = {
