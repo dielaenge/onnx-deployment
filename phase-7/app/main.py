@@ -199,7 +199,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 # send results to client
                 await websocket.send_json(response_json)
 
-                # slice buffer by 3200 samples (0.2 seconds), remaining 3.8 seconds will be concatenated with new input when available) // decreased stride vs phase 6
+                # slice buffer by 3200 samples (0.2 seconds), remaining 3.8 seconds will be concatenated with new input when available // decreased stride vs phase 6
                 audio_buffer = audio_buffer[-60800:]
     
     except WebSocketDisconnect:
