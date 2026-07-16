@@ -220,7 +220,6 @@ def create_presigned_upload_url(
     expiration=300
 ):
     """Generate a presigned URL to share an S3 object
-
     :param expiration: Time in seconds for the presigned URL to remain valid
     :return: JSON response containing upload URL as string and upload file name. If error, returns None.
     """
