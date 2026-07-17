@@ -55,7 +55,7 @@ resource "aws_s3_bucket_cors_configuration" "cors_config_phase7_app_data_bucket"
 
   cors_rule {
     allowed_headers = ["*"]
-    allowed_methods = ["PUT"]
+    allowed_methods = ["PUT", "GET", "HEAD"]
     allowed_origins = [
       "https://${aws_cloudfront_distribution.bape_phase7_frontend_s3_distribution.domain_name}",
       "http://127.0.0.1:8000",
