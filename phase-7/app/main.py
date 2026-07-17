@@ -1,7 +1,7 @@
 from .inference_engine import AcousticModelProcessor
 from .audio_utils import MelSpectrogram
 
-from fastapi import FastAPI, WebSocket, Request, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, Request, WebSocketDisconnect, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
@@ -213,7 +213,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             spec_hot = np.concatenate(accumulated_spec, axis=1) #stack on second dimension; shape is (nmels, time) or (16,100)
             np.save(BASE_DIR / "models" / f"spec_hot_{session_id}.npy", spec_hot)
 
-@app.get("/api/get-upload-url")
+@app.get("/api/presigned-urls")
 # create presigned URLs
 def create_presigned_upload_url(
     session_id: str,
@@ -246,18 +246,44 @@ def create_presigned_upload_url(
             ExpiresIn=expiration
         )
 
+        wav_download_url = s3_client.generate_presigned_url(
+            ClientMethod='get_object',
+            Params={
+                "Bucket": BUCKET_NAME,
+                "Key": f"processed/{session_id}.wav"
+            },
+            ExpiresIn=expiration
+        )
+
+        spec_download_url = s3_client.generate_presigned_url(
+            ClientMethod='get_object',
+            Params={
+                "Bucket": BUCKET_NAME,
+                "Key": f"spectrograms/{session_id}.npy"
+            },
+            ExpiresIn=expiration
+        )
+
         presigned_url_response_json = {
+            "session_id": session_id,
             "upload_url": upload_url,
-            "object_key": f"uploads/{session_id}.wav",
-            "session_id": session_id 
+            "upload_object_key": f"uploads/{session_id}.wav",
+            "wav_download_url": wav_download_url,
+            "wav_download_key": f"processed/{session_id}",
+            "spec_download_url": spec_download_url,
+            "spec_download_key": f"spectrograms/{session_id}.npy"  
         }
 
+        return presigned_url_response_json
+    
+    # handle boto3 errors
     except ClientError as e:
-        logging.error(e)
-        return None
-
-    # The response contains the presigned URL and object key
-    return presigned_url_response_json
+        logging.error("boto3 error: %s:", e)
+    
+    # handle general errors
+    except Exception as e:
+        logger.error("URL generation failed: %s", e)
+        raise HTTPException(status_code=500, detail="S3 presigned URL generation failed.")
 
 
 # check if app is run locally or on cloud, either mount from local static directory or skip and serve frontend from CloudFront / S3

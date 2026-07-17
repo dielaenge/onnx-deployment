@@ -6,6 +6,7 @@
     <title>BAPE | Blind Acoustic Parameter Estimator | PHASE 7 - HOT & COLD PATH DEPLOYMENT</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/npyjs@1.2.3/index.min.js"></script>
     <style>
         .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
         .recording-glow { animation: pulse 1.5s infinite; }
@@ -85,19 +86,20 @@
                     <canvas id="spectrogram-canvas" width="800" height="160" class="w-full h-32 bg-black rounded-lg"></canvas>
                 </div>
                     
-                    <!-- Audio Player (Left, 1 column) 
+                <div id="coldPathResults" class="hidden">
+                    <!-- audioPlayer(Right, 3 columns) -->
                     <div class="space-y-2 md:col-span-1">
                         <h3 class="text-xs font-bold uppercase text-slate-500">Input Audio</h3>
                         <audio id="audio-player" controls class="w-full h-10 opacity-80 hover:opacity-100 transition-opacity"></audio>
-                    </div> -->
+                    </div>
 
-                    <!-- Spectrogram (Right, 3 columns)
+                    <!-- Spectrogram (Right, 3 columns) -->
                     <div class="space-y-2 md:col-span-3">
                         <h3 class="text-xs font-bold uppercase text-slate-500">Spectrogram</h3>
                         <img id="spectrogram-display" class="rounded-lg border border-slate-700 w-full max-h-32 object-cover opacity-80" />
+                        <canvas id="cold-path-spectrogram-canvas" class="rounded-lg border border-slate-700 w-full h-32 bg-black opacity-80"></canvas>
                     </div> 
                 </div>
-                -->
               
                 
               <details class="group bg-black/40 rounded-xl border border-emerald-500/10 overflow-hidden">
@@ -222,6 +224,9 @@ const statusText = document.getElementById('status-text');
 const recText = document.getElementById('rec-text');
 const jsonResult = document.getElementById('json-result');
 const resultArea = document.getElementById('result-area');
+const coldPathResults = document.getElementById('coldPathResults');
+const audioPlayer = document.getElementById("audio-player")
+const liveSpec = document.getElementById("spectrogram-display")
 
 // Web Audio API
 // Get the current hostname (to solve switching between local and cloud deployment)
@@ -350,21 +355,21 @@ function stopRecording() {
     }
 
     // trigger cold-path upload
-    uploadRecording();
+    uploadAndProcessRecording();
 };
 
-// UPLOAD ON STOP
+// UPLOAD AND PROCESS RECORDING ON STOP
 
-async function uploadRecording() {
+async function uploadAndProcessRecording() {
     if (offlineAudioBuffer.length === 0) return;
 
     try {
         console.log("Encoding raw floats to 16-bit WAV …");
         const wavBlob = encodeWav(offlineAudioBuffer, 16000);
 
-        console.log("Fetching presigned URL …");
-        const response = await fetch(`/api/get-upload-url?session_id=${sessionId}`);
-        const { upload_url, object_key, session_id } = await response.json();
+        console.log("Fetching presigned URLs …");
+        const response = await fetch(`/api/presigned-urls?session_id=${sessionId}`);
+        const { session_id, upload_url, upload_object_key, wav_download_url, wav_download_key, spec_download_url, spec_download_key } = await response.json();
         
         console.log("Uploading WAV directly to S3...");
         await fetch(upload_url, {
@@ -374,11 +379,67 @@ async function uploadRecording() {
         });
         console.log(`SUCCESS: WAV uploaded to S3 for Session ID: ${session_id}`);
         
-        // Reset the buffer for the next session
-        offlineAudioBuffer = [];
+
+        console.log(`Polling S3 for cold path results…`);
+        
+        let ready = false;
+        let attempt = 0;
+        const maxAttempts = 8;
+        
+        while (attempt < maxAttempts ) {
+            const check = await fetch(wav_download_url, { method: 'HEAD' });
+            
+            // if HTTP: 200: S3 has the file
+            if (check.ok) {
+                ready = true;
+                break;
+            }
+
+            // if check does not return 200, calculate delay, sleep and initialize next attempt
+            let delay = 1000 * Math.pow(1.5, attempt) + (Math.random() * 500);
+            console.log(`Results not ready yet, retrying in ${Math.round(delay)}ms ….`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            attempt++;
+        }
+
+        if (ready) {
+            console.log("Assets ready in S3, downloading cold path results…")
+            
+            // Catch results
+            const processedWav = await fetch(wav_download_url, { method: 'GET' });
+            const wavBlob = await processedWav.blob();
+            // create a temporary blob URL that references the WAV audio data stored in memory
+            const audioUrl = URL.createObjectURL(wavBlob);
+
+            coldPathResults.classList.remove('hidden');
+            liveSpec.classList.add('hidden');
+            audioPlayer.src = audioUrl;
+
+            const processedSpec = await fetch(spec_download_url, { method: 'GET' });
+            
+            const specBuffer = await processedSpec.arrayBuffer();
+            const n = new npyjs();
+            const parsedSpectrogram = n.parse(specBuffer); 
+
+            // parsedSpectrogram contains:
+            // - parsedSpectrogram.shape: Array representing dimensions [16, 7200]
+            // - parsedSpectrogram.data: Float32Array containing raw spectrogram values
+
+            // Pass these parsed values directly to your existing canvas rendering functions
+            renderSpectrogramCanvas(parsedSpectrogram.data, parsedSpectrogram.shape, "cold-path-spectrogram-canvas");
+
+            // Render (extra functions?)
+            // TBD
+
+            // Reset Audio Buffer
+            // Reset the buffer for the next session
+            offlineAudioBuffer = [];
+        }
+
+        
     } catch (e) {
-        console.error("Cold-path upload failed:", e);
-    }   
+        console.error(`Cold-path upload failed:${e}`);
+    }
 }
 
 // BUILD LEGEND
@@ -727,7 +788,7 @@ function drawChart(timelineData, paramKey, divContainerId, yAxisLabel) {
     .text("BAPEs and Confidence");
 }
 
-// Spectrogram rendering
+// Live spectrogram rendering
 function renderSpectrogram(spectrogramSlice) {
     const canvas = document.getElementById("spectrogram-canvas");
     const ctx = canvas.getContext("2d");
@@ -758,6 +819,46 @@ function renderSpectrogram(spectrogramSlice) {
             );
         }
     }
+}
+
+// cold path spectrogram rendering
+function renderSpectrogramCanvas(data, shape, canvasId) {
+    const canvas = document.getElementById(canvasId);
+    const ctx = canvas.getContext('2d');
+    
+    // Deconstruct the array shape from npyjs ([rows, columns])
+    const [numBins, numFrames] = shape;
+    
+    // Set the canvas resolution to match your data dimensions exactly
+    canvas.width = numFrames;
+    canvas.height = numBins;
+    
+    // Create an empty off-screen pixel array buffer
+    const imageData = ctx.createImageData(numFrames, numBins);
+    
+    for (let bin = 0; bin < numBins; bin++) {
+        for (let frame = 0; frame < numFrames; frame++) {
+            // Locate flat index in row-major numpy array
+            const flatIndex = bin * numFrames + frame;
+            const val = data[flatIndex];
+            
+            // Map standardized floats to standard color byte (0-255)
+            const intensity = Math.max(0, Math.min(255, (val + 3) * 42.5));
+            
+            // Flip the bin vertically so low frequencies sit at the bottom of the canvas
+            const flippedBin = numBins - 1 - bin;
+            const pixelIndex = (flippedBin * numFrames + frame) * 4;
+            
+            // Write RGBA values directly to pixel buffer
+            imageData.data[pixelIndex]     = intensity; // Red
+            imageData.data[pixelIndex + 1] = intensity; // Green
+            imageData.data[pixelIndex + 2] = intensity; // Blue
+            imageData.data[pixelIndex + 3] = 255;       // Alpha (Fully opaque)
+        }
+    }
+    
+    // Commit the entire pixel buffer to the canvas in a single draw call
+    ctx.putImageData(imageData, 0, 0);
 }
 
 // when websocket receives message
