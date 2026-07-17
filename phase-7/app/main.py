@@ -215,7 +215,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
 @app.get("/api/presigned-urls")
 # create presigned URLs
-def create_presigned_upload_url(
+def create_presigned_urls(
     session_id: str,
     expiration=300
 ):
