@@ -106,7 +106,7 @@
                     <summary class="p-4 cursor-pointer font-bold text-xs uppercase tracking-widest text-emerald-500 hover:bg-emerald-500/5 transition-colors">
                         Show Raw JSON Data
                     </summary>
-                    <pre id="json-result" class="p-4 text-[10px] font-mono overflow-x-auto text-emerald-400/80"></pre>
+                    <pre id="json-result" class="p-4 text-[10px] font-mono overflow-x-auto text-emerald-400/80 max-h-60 overflow-y-auto"></pre>
                 </details>
             </div>
         </div>
@@ -164,6 +164,8 @@
         </footer>
     </div>
     </section>
+    <div id="t60_params-tooltip">
+    <div id="c50_params-tooltip"></div>
 </body>
 
 <script>
@@ -258,7 +260,8 @@ let offlineAudioBuffer = [];
 let currentTimelineData = []; // was null before, now empty array
 let timeCounter = 0; // will serve as time indicator and be increased by 2 for every chunk
 
-let lockedParamId = null; //locked param_id to trigger
+let lockedT60ParamId = null;
+let lockedC50ParamId = null;
 
 // FREQUENCY BANDS
 const bandLabels = [
@@ -426,7 +429,7 @@ async function uploadAndProcessRecording() {
             // - parsedSpectrogram.data: Float32Array containing raw spectrogram values
 
             // Pass these parsed values directly to your existing canvas rendering functions
-            renderSpectrogramCanvas(parsedSpectrogram.data, parsedSpectrogram.shape, "cold-path-spectrogram-canvas");
+            renderSpectrogramCanvas(parsedSpectrogram.data, parsedSpectrogram.shape, );
 
             // Render (extra functions?)
             // TBD
@@ -457,9 +460,10 @@ function buildLegend(paramKey) {
         freqLabel.innerText = bandLabels[index].freq;
 
         freqLabel.innerText = band.freq;
+
         // Create the main Button Container
         const btn = document.createElement("button");
-        btn.id = `btn-param-${index}`;
+        btn.id = `btn-param-${paramKey}-${index}`;
         btn.className = "flex items-center space-x-3 text-xs p-2 rounded hover:bg-white/5 w-full text-left transition-all border border-transparent hover:border-slate-700 group";
             
         // Create the Color Dot
@@ -470,8 +474,6 @@ function buildLegend(paramKey) {
         // Create a Wrapper DIV for the text (Flex Column)
         const textCol = document.createElement("div");
         textCol.className = "flex flex-col";
-
-       
 
         // Create the Description Span (Small/Gray)
         const ctxLabel = document.createElement("span");
@@ -486,19 +488,24 @@ function buildLegend(paramKey) {
         // Add Toggle Functionality
         // Helper function to isolate visually
         const isolateVisuals = (targetId) => {
-            // Fade SVG graphs
-            d3.selectAll(".parameter-group").transition().duration(200).style("opacity", 0.05);
-            d3.select(`.param-${targetId}`).transition().duration(200).style("opacity", 1);
+            // FIX B: Restrict D3 selections strictly to the current chart container
+            d3.select(`#${paramKey === 't60_params' ? 't60-chart-container' : 'c50-chart-container'}`)
+              .selectAll(".parameter-group")
+              .transition().duration(200).style("opacity", 0.05);
 
-        // Dim HTML buttons
+            // Isolate the focused line
+            d3.select(`#${paramKey === 't60_params' ? 't60-chart-container' : 'c50-chart-container'}`)
+              .selectAll(`.param-${targetId}`)
+              .transition().duration(200).style("opacity", 1);
+
+            // Dim parameter-specific buttons
             for (let i = 0; i < 7; i++) {
-                const b = document.getElementById(`btn-param-${i}`);
+                const b = document.getElementById(`btn-param-${paramKey}-${i}`);
                 if (b) {
                     if (i === targetId) {
                         b.classList.remove("opacity-40", "grayscale");
-                        b.classList.add("border-slate-500"); // Add highlight border
-                    } 
-                    else {
+                        b.classList.add("border-slate-500");
+                    } else {
                         b.classList.add("opacity-40", "grayscale");
                         b.classList.remove("border-slate-500");
                     }
@@ -508,60 +515,48 @@ function buildLegend(paramKey) {
 
         // Helper function to reset visuals
         const resetVisuals = () => {
-            d3.selectAll(".parameter-group")
-            .transition()
-            .duration(200)
-            .style("opacity", 1);
+            // FIX C: Restrict reset selection to the current chart container
+            d3.select(`#${paramKey === 't60_params' ? 't60-chart-container' : 'c50-chart-container'}`)
+              .selectAll(".parameter-group")
+              .transition().duration(200).style("opacity", 1);
             
             for (let i = 0; i < 7; i++) {
-                const b = document.getElementById(`btn-param-${i}`);
+                const b = document.getElementById(`btn-param-${paramKey}-${i}`);
                 if (b) {
                     b.classList.remove("opacity-40", "grayscale", "border-slate-500");
                 }
             }
         };
 
-        // HOVER: Temporarily isolate if nothing is locked
-        btn.onmouseenter = () => {
-            if (lockedParamId === null) isolateVisuals(index);
+        // Determine current lock state dynamically based on the parameter
+        const getLockState = () => paramKey === 't60_params' ? lockedT60ParamId : lockedC50ParamId;
+        const setLockState = (val) => {
+            if (paramKey === 't60_params') lockedT60ParamId = val;
+            else lockedC50ParamId = val;
         };
 
-        // LEAVE: Reset if nothing is locked, or return to locked state
-        btn.onmouseleave = () => {
-            if (lockedParamId === null) {
-                resetVisuals();
-            } 
-            else {
-                isolateVisuals(lockedParamId);
-            }
-        };
-
-        // CLICK: Toggle lock state
+        btn.onmouseenter = () => { if (getLockState() === null) isolateVisuals(index); };
+        btn.onmouseleave = () => { if (getLockState() === null) resetVisuals(); else isolateVisuals(getLockState()); };
+        
         btn.onclick = () => {
-            if (lockedParamId === index) {
-                // Unlock
-                lockedParamId = null;
+            if (getLockState() === index) {
+                setLockState(null);
                 resetVisuals();
-                lockedParamId = null; // Update for the D3 invisible overlay tooltip
-            } 
-            else {
-                // Lock
-                lockedParamId = index;
+            } else {
+                setLockState(index);
                 isolateVisuals(index);
-                lockedParamId = index; // Update for the D3 invisible overlay tooltip
             }
         };
 
-        // Final Assembly: Attach Dot and TextWrapper to Button
         btn.appendChild(dot);
         btn.appendChild(textCol);
-
-        // Mount to the Page
         document.getElementById(`${paramKey}-legend`).append(btn);
     });
 };
-window.onload = buildLegend(`t60_params`);
-window.onload = buildLegend(`c50_params`);
+window.onload = () => {
+    buildLegend('t60_params');
+    buildLegend('c50_params');
+};
 
 // D3 visualisation
 function drawChart(timelineData, paramKey, divContainerId, yAxisLabel) {
@@ -727,7 +722,7 @@ function drawChart(timelineData, paramKey, divContainerId, yAxisLabel) {
                 const windowStartX = xScale(currentData.time);
                 const windowEndX = xScale(currentData.time + 4);
                 const pointX = xScale(currentData.time + 2);
-                d3.select("#tooltip")
+                d3.select(`#${paramKey}-tooltip`)
                     .style("left", pointX + "px")
                     .style("top", (yScale(currentData.val) - 35) + "px")
                     .style("opacity", 1);
@@ -790,35 +785,47 @@ function drawChart(timelineData, paramKey, divContainerId, yAxisLabel) {
 
 // Live spectrogram rendering
 function renderSpectrogram(spectrogramSlice) {
-    const canvas = document.getElementById("spectrogram-canvas");
-    const ctx = canvas.getContext("2d");
+    const visibleCanvas = document.getElementById("spectrogram-canvas");
+    const visibleCtx = visibleCanvas.getContext("2d");
     
-    const rows = 16;      // Mel Bins (vertical)
-    const cols = 100;     // Time slices (horizontal)
+    // 1. Create a tiny, in-memory offscreen canvas (exactly matching your data resolution: 100x16)
+    const offscreenCanvas = document.createElement("canvas");
+    offscreenCanvas.width = 100;
+    offscreenCanvas.height = 16;
+    const offscreenCtx = offscreenCanvas.getContext("2d");
     
-    const cellWidth = canvas.width / cols;
-    const cellHeight = canvas.height / rows;
-
-    for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < cols; col++) {
+    // Create an image data buffer for the tiny canvas
+    const imgData = offscreenCtx.createImageData(100, 16);
+    
+    for (let row = 0; row < 16; row++) {
+        for (let col = 0; col < 100; col++) {
             const val = spectrogramSlice[row][col];
-            
-            // Map standardized float range [-3, +3] to color scale [0, 255]
             let intensity = Math.floor(((val + 3) / 6) * 255);
-            intensity = Math.max(0, Math.min(255, intensity)); // Clamp boundary
-
-            // Bright green mapping
-            ctx.fillStyle = `rgb(0, ${intensity}, 0)`;
+            intensity = Math.max(0, Math.min(255, intensity));
             
-            // Draw rectangle (flip row vertically so high frequencies are at the top)
-            ctx.fillRect(
-                col * cellWidth, 
-                (rows - 1 - row) * cellHeight, 
-                cellWidth, 
-                cellHeight
-            );
+            // Flip row vertically so high frequencies are on top
+            const flippedRow = 16 - 1 - row;
+            const pixelIndex = (flippedRow * 100 + col) * 4;
+            
+            imgData.data[pixelIndex]     = 0;         // Red
+            imgData.data[pixelIndex + 1] = intensity; // Green (Glow)
+            imgData.data[pixelIndex + 2] = 0;         // Blue
+            imgData.data[pixelIndex + 3] = 255;       // Alpha
         }
     }
+    
+    // Write pixels to the tiny offscreen canvas
+    offscreenCtx.putImageData(imgData, 0, 0);
+    
+    // 2. Draw and upscale the tiny canvas onto the full-sized screen canvas [1.2.6]
+    visibleCtx.clearRect(0, 0, visibleCanvas.width, visibleCanvas.height);
+    
+    // Enable bilinear filtering on the visible canvas [1.2.6]
+    visibleCtx.imageSmoothingEnabled = true;
+    visibleCtx.imageSmoothingQuality = "high";
+    
+    // Perform hardware-accelerated stretch [1.2.6]
+    visibleCtx.drawImage(offscreenCanvas, 0, 0, visibleCanvas.width, visibleCanvas.height);
 }
 
 // cold path spectrogram rendering
@@ -915,21 +922,22 @@ ws.onmessage = function(event) {
 
 };
 
-// re-render D3 graphs on window resize
-let resizeTimer;
+    // re-render D3 graphs on window resize
+    let resizeTimer;
 
-window.addEventListener("resize", () => {
-    // 1. Clear any timer
-    clearTimeout(resizeTimer);
-    // 2. Set a new timer to run 200ms AFTER the last resize event
-    resizeTimer = setTimeout(() => {
-    if (rollingHistory) {
+    window.addEventListener("resize", () => {
+        // 1. Clear any timer
+        clearTimeout(resizeTimer);
+        // 2. Set a new timer to run 200ms AFTER the last resize event
+        resizeTimer = setTimeout(() => {
+        if (rollingHistory) {
         // Recalculate dimensions and redraw
         drawChart(rollingHistory, 't60_params', 't60-chart-container', 'T60 Decay (Seconds)');
         drawChart(rollingHistory, 'c50_params', 'c50-chart-container', 'C50 Clarity (dB)');
-    }
-    }, 200);
-});
+        }
+        }, 200);
+    });
+
 
 // HELPER: Convert raw Float32 array to a 16-bit PCM WAV Blob, less loss than using the MediaRecorder compression
 function encodeWav(samples, sampleRate) {
