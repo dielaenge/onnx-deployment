@@ -74,7 +74,7 @@ async def lifespan(app: FastAPI):
     app.state.t60_processor = None
     logger.info("CLEANUP: T60 processor set to None.")
     # AT SHUTDOWN: Clean up the ML models and release the resources
-    app.state.t60_processor = None
+    app.state.c50_processor = None
     logger.info("CLEANUP: C50 processor set to None.")
     app.state.melspec_preprocessor = None
     logger.info("CLEANUP: melspec_preprocessor set to None.")
@@ -237,6 +237,7 @@ def create_presigned_urls(
         )
     
     try:
+
         upload_url = s3_client.generate_presigned_url(
             ClientMethod='put_object',
             Params={

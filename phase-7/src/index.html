@@ -58,8 +58,18 @@
             <!-- Result Area -->
             <div id="result-area" class="hidden space-y-6 pt-4 border-t border-slate-800 text-left w-full">
             
-                <div id="t60_params-tooltip"></div>
-                <div id="c50_params-tooltip"></div>
+
+                <!-- TOOL TIP -->
+                <div id="t60_params-tooltip" class="absolute opacity-0 pointer-events-none bg-slate-900 border border-slate-800 p-2 rounded text-xs text-white z-50 rounded-xl shadow-xl">
+                    <div class="tt-header font-bold text-emerald-400"></div>
+                    <div class="tt-value text-slate-300 mt-1"></div>
+                </div>
+                <div id="c50_params-tooltip" class="absolute opacity-0 pointer-events-none bg-slate-900 border border-slate-800 p-2 rounded text-xs text-white z-50 rounded-xl shadow-xl">
+                    <div class="tt-header font-bold text-blue-400"></div>
+                    <div class="tt-value text-slate-300 mt-1"></div>
+                </div>
+
+
                 <!-- TOP: The Outputs (Side-by-Side Dual Dashboards) -->
                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 w-full">
                     
@@ -390,7 +400,7 @@ async function uploadAndProcessRecording() {
         const maxAttempts = 8;
         
         while (attempt < maxAttempts ) {
-            const check = await fetch(wav_download_url, { method: 'HEAD' });
+            const check = await fetch(wav_download_url, { method: 'GET' });
             
             // if HTTP: 200: S3 has the file
             if (check.ok) {
@@ -429,7 +439,7 @@ async function uploadAndProcessRecording() {
             // - parsedSpectrogram.data: Float32Array containing raw spectrogram values
 
             // Pass these parsed values directly to your existing canvas rendering functions
-            renderSpectrogramCanvas(parsedSpectrogram.data, parsedSpectrogram.shape, );
+            renderSpectrogramCanvas(parsedSpectrogram.data, parsedSpectrogram.shape, "cold-path-spectrogram-canvas");
 
             // Render (extra functions?)
             // TBD
@@ -563,6 +573,7 @@ function drawChart(timelineData, paramKey, divContainerId, yAxisLabel) {
     const isT60 = paramKey === "t60_params";
     const currentLockedId = isT60 ? lockedT60ParamId : lockedC50ParamId;
     const tooltipSelector = `#${paramKey}-tooltip`;
+    const tooltip = d3.select(tooltipSelector);
 
     const container = document.getElementById(divContainerId);
 
@@ -742,10 +753,10 @@ function drawChart(timelineData, paramKey, divContainerId, yAxisLabel) {
                     .attr("x", windowEndX)
                     .attr("width", Math.max(0, (width - 20) - windowEndX));
 
-                d3.select("#tt-header")
+                tooltip.select(".tt-header")
                     .text(`${bandLabels[currentLockedId].freq} (${bandLabels[currentLockedId].desc})`);
 
-                d3.select("#tt-value")
+                tooltip.select(".tt-value")
                     .html(
                     `Estimate: ${currentData.val.toFixed(3)}<br>` +
                     `Interval: ${currentData.low.toFixed(2)} – ${currentData.high.toFixed(2)}<br><br>`+
@@ -925,24 +936,20 @@ ws.onmessage = function(event) {
     // draw charts
     drawChart(rollingHistory, 't60_params', 't60-chart-container', 'T60 Decay (Seconds)');
     drawChart(rollingHistory, 'c50_params', 'c50-chart-container', 'C50 Clarity (dB)');
-
 };
 
-    // re-render D3 graphs on window resize
-    let resizeTimer;
-
-    window.addEventListener("resize", () => {
-        // 1. Clear any timer
-        clearTimeout(resizeTimer);
-        // 2. Set a new timer to run 200ms AFTER the last resize event
-        resizeTimer = setTimeout(() => {
-        if (rollingHistory) {
-        // Recalculate dimensions and redraw
-        drawChart(rollingHistory, 't60_params', 't60-chart-container', 'T60 Decay (Seconds)');
-        drawChart(rollingHistory, 'c50_params', 'c50-chart-container', 'C50 Clarity (dB)');
+// re-render D3 graphs on window resize
+let resizeTimer;
+window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+        const rollingHistory = currentTimelineData.slice(-50);   // recompute, module-scoped source
+        if (rollingHistory.length) {                              // .length, not truthiness
+            drawChart(rollingHistory, 't60_params', 't60-chart-container', 'T60 Decay (Seconds)');
+            drawChart(rollingHistory, 'c50_params', 'c50-chart-container', 'C50 Clarity (dB)');
         }
-        }, 200);
-    });
+    }, 200);
+});
 
 
 // HELPER: Convert raw Float32 array to a 16-bit PCM WAV Blob, less loss than using the MediaRecorder compression
