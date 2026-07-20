@@ -57,7 +57,9 @@
 
             <!-- Result Area -->
             <div id="result-area" class="hidden space-y-6 pt-4 border-t border-slate-800 text-left w-full">
-                
+            
+                <div id="t60_params-tooltip"></div>
+                <div id="c50_params-tooltip"></div>
                 <!-- TOP: The Outputs (Side-by-Side Dual Dashboards) -->
                 <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 w-full">
                     
@@ -164,8 +166,6 @@
         </footer>
     </div>
     </section>
-    <div id="t60_params-tooltip">
-    <div id="c50_params-tooltip"></div>
 </body>
 
 <script>
@@ -560,6 +560,10 @@ window.onload = () => {
 
 // D3 visualisation
 function drawChart(timelineData, paramKey, divContainerId, yAxisLabel) {
+    const isT60 = paramKey === "t60_params";
+    const currentLockedId = isT60 ? lockedT60ParamId : lockedC50ParamId;
+    const tooltipSelector = `#${paramKey}-tooltip`;
+
     const container = document.getElementById(divContainerId);
 
     const width = container.clientWidth;
@@ -697,12 +701,14 @@ function drawChart(timelineData, paramKey, divContainerId, yAxisLabel) {
         .attr("height", height)
         .attr("fill", "transparent")
         .on("mousemove", function(event) {
-            if (lockedParamId !== null) {
+            
+
+            if (currentLockedId !== null) {
                 const [mouseX, _] = d3.pointer(event);
                 const hoverTime = xScale.invert(mouseX) - 2;
 
                 // Fetch focused frequency band
-                const focusedFrequencyBand = seriesData.find(s => s.id === lockedParamId);
+                const focusedFrequencyBand = seriesData.find(s => s.id === currentLockedId);
                 if (!focusedFrequencyBand) 
                     return;
 
@@ -714,7 +720,7 @@ function drawChart(timelineData, paramKey, divContainerId, yAxisLabel) {
 
                 // If the data doesn't exist (e.g., ghost window at 2.0s), hide the tooltip and stop.
                 if (!currentData) {
-                    d3.select("#tooltip").style("opacity", 0);
+                    d3.select(tooltipSelector).style("opacity", 0);
                     return; 
                 }
 
@@ -722,7 +728,7 @@ function drawChart(timelineData, paramKey, divContainerId, yAxisLabel) {
                 const windowStartX = xScale(currentData.time);
                 const windowEndX = xScale(currentData.time + 4);
                 const pointX = xScale(currentData.time + 2);
-                d3.select(`#${paramKey}-tooltip`)
+                d3.select(tooltipSelector)
                     .style("left", pointX + "px")
                     .style("top", (yScale(currentData.val) - 35) + "px")
                     .style("opacity", 1);
@@ -737,7 +743,7 @@ function drawChart(timelineData, paramKey, divContainerId, yAxisLabel) {
                     .attr("width", Math.max(0, (width - 20) - windowEndX));
 
                 d3.select("#tt-header")
-                    .text(`${bandLabels[lockedParamId].freq} (${bandLabels[lockedParamId].desc})`);
+                    .text(`${bandLabels[currentLockedId].freq} (${bandLabels[currentLockedId].desc})`);
 
                 d3.select("#tt-value")
                     .html(
@@ -748,7 +754,7 @@ function drawChart(timelineData, paramKey, divContainerId, yAxisLabel) {
             }
         })
         .on("mouseout", function() {
-            d3.select("#tooltip").style("opacity", 0);
+            d3.select(tooltipSelector).style("opacity", 0);
             maskLeft.attr("width", 0);
             maskRight.attr("width", 0);
             });
