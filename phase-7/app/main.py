@@ -260,7 +260,7 @@ def create_presigned_urls(
             ClientMethod='get_object',
             Params={
                 "Bucket": BUCKET_NAME,
-                "Key": f"spectrograms/{session_id}.npy"
+                "Key": f"spectrograms/{session_id}.json"
             },
             ExpiresIn=expiration
         )
@@ -272,7 +272,7 @@ def create_presigned_urls(
             "wav_download_url": wav_download_url,
             "wav_download_key": f"processed/{session_id}",
             "spec_download_url": spec_download_url,
-            "spec_download_key": f"spectrograms/{session_id}.npy"  
+            "spec_download_key": f"spectrograms/{session_id}.json"  
         }
 
         return presigned_url_response_json
