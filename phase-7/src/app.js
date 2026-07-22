@@ -201,7 +201,7 @@ async function uploadAndProcessRecording() {
             const specJson = await processedSpec.json();
             
             // Pass JSON values directly to your existing canvas rendering functions
-            renderSpectrogramCanvas(specJson.data.flat(), specJson.shape, "cold-path-spectrogram-canvas");
+            renderSpectrogram(specJson.data, specJson.shape, "cold-path-spectrogram-canvas");
 
             // Re-render D3 charts with FULL session history (0s to end)
             drawChart(currentTimelineData, 't60_params', 't60-chart-container', 'T60 Decay (Seconds)');
@@ -481,7 +481,7 @@ function drawChart(timelineData, paramKey, divContainerId, yAxisLabel) {
             const hoverTime = xScale.invert(mouseX) - 2;
 
             // Fetch focused frequency band
-            const focusedFrequencyBand = seriesData.find(s => s.id === currentLockedId);
+            const focusedFrequencyBand = seriesData.find(s => s.id === activeBandId);
             if (!focusedFrequencyBand) 
                 return;
 
@@ -516,7 +516,7 @@ function drawChart(timelineData, paramKey, divContainerId, yAxisLabel) {
                 .attr("width", Math.max(0, (width - 20) - windowEndX));
 
             tooltip.select(".tt-header")
-                .text(`${bandLabels[currentLockedId].freq} (${bandLabels[currentLockedId].desc})`);
+                .text(`${bandLabels[activeBandId].freq} (${bandLabels[activeBandId].desc})`);
 
             tooltip.select(".tt-value")
                 .html(
@@ -608,46 +608,6 @@ function renderSpectrogram(data, shape, canvasId) {
     visibleCtx.drawImage(offscreenCanvas, 0, 0, visibleCanvas.width, visibleCanvas.height);
 }
 
-// cold path spectrogram rendering
-function renderSpectrogramCanvas(data, shape, canvasId) {
-    const canvas = document.getElementById(canvasId);
-    const ctx = canvas.getContext('2d');
-    
-    // Deconstruct the array shape from npyjs ([rows, columns])
-    const [numBins, numFrames] = shape;
-    
-    // Set the canvas resolution to match your data dimensions exactly
-    canvas.width = numFrames;
-    canvas.height = numBins;
-    
-    // Create an empty off-screen pixel array buffer
-    const imageData = ctx.createImageData(numFrames, numBins);
-    
-    for (let bin = 0; bin < numBins; bin++) {
-        for (let frame = 0; frame < numFrames; frame++) {
-            // Locate flat index in row-major numpy array
-            const flatIndex = bin * numFrames + frame;
-            const val = data[flatIndex];
-            
-            // Map standardized floats to standard color byte (0-255)
-            const intensity = Math.max(0, Math.min(255, (val + 3) * 42.5));
-            
-            // Flip the bin vertically so low frequencies sit at the bottom of the canvas
-            const flippedBin = numBins - 1 - bin;
-            const pixelIndex = (flippedBin * numFrames + frame) * 4;
-            
-            // Write RGBA values directly to pixel buffer
-            imageData.data[pixelIndex]     = intensity; // Red
-            imageData.data[pixelIndex + 1] = intensity; // Green
-            imageData.data[pixelIndex + 2] = intensity; // Blue
-            imageData.data[pixelIndex + 3] = 255;       // Alpha (Fully opaque)
-        }
-    }
-    
-    // Commit the entire pixel buffer to the canvas in a single draw call
-    ctx.putImageData(imageData, 0, 0);
-}
-
 // when websocket receives message
 ws.onmessage = function(event) {
     // parse the data from the main.py backend, which is on the other end of the websocket connection
@@ -655,7 +615,10 @@ ws.onmessage = function(event) {
 
     //render spectrogram
     if (incomingData.spectrogram_latest100frames) {
-        renderSpectrogram(incomingData.spectrogram_latest100frames.data.flat(), incomingData.spectrogram_latest100frames.shape, );
+        renderSpectrogram(
+            incomingData.spectrogram_latest100frames, 
+            [16, 100], // standard size of hot path slice
+            "spectrogram-canvas");
     }
     const t60Params = incomingData.t60_bapes.params[0].flat();
     const t60Quantiles = incomingData.t60_bapes.quantiles[0].flat();

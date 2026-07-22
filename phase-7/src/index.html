@@ -6,7 +6,6 @@
     <title>BAPE | Blind Acoustic Parameter Estimator | PHASE 7 - HOT & COLD PATH DEPLOYMENT</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
-    <script src="app.js"></script>
     <style>
         .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
         .recording-glow { animation: pulse 1.5s infinite; }
@@ -89,11 +88,11 @@
                         <audio id="audio-player" controls class="w-full h-10 opacity-80 hover:opacity-100 transition-opacity"></audio>
                     </div>
 
-                    <!-- Spectrogram (Right, 3 columns) -->
-                    <div id="spectrogram-canvas" class="space-y-2 md:col-span-3">
-                        <h3 class="text-xs font-bold uppercase text-slate-500">Spectrogram</h3>
+                    <!-- Cold Path Spectrogram Canvas -->
+                    <div class="space-y-2 md:col-span-3">
+                        <h3 class="text-xs font-bold uppercase text-slate-500">Full Session Spectrogram</h3>
                         <canvas id="cold-path-spectrogram-canvas" class="rounded-lg border border-slate-700 w-full h-32 bg-black opacity-80"></canvas>
-                    </div> 
+                    </div>
                 </div>
               
                 
@@ -159,6 +158,6 @@
         </footer>
     </div>
     </section>
+    <script src="app.js"></script>
 </body>
-
 </html>
