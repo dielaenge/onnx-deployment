@@ -6,6 +6,7 @@ resource "aws_s3_bucket" "bape_phase7_frontend" {
   }
 }
 
+
 # See https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html
 data "aws_iam_policy_document" "origin_bucket_policy" {
   statement {

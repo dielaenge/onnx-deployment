@@ -14,7 +14,7 @@ resource "aws_ecs_task_definition" "task_definition_bape" {
   container_definitions = jsonencode([
     {
       name      = "bape-container"
-      image     = "${aws_ecr_repository.bape_ecr_phase7.repository_url}:phase7"
+      image     = "${data.aws_ecr_repository.bape_ecr.repository_url}:phase7"
       essential = true
       portMappings = [
         {
@@ -33,7 +33,7 @@ resource "aws_ecs_task_definition" "task_definition_bape" {
         },
         {
           "name"  = "APP_DATA_BUCKET_NAME",
-          "value" = aws_s3_bucket.bape_app_data_phase7.id
+          "value" = data.aws_s3_bucket.bape_bucket.id
         },
         {
           "name"  = "AWS_REGION",
@@ -74,7 +74,7 @@ resource "aws_ecs_task_definition" "task_definition_worker" {
     {
       "name" : "worker-container"
       "command" : ["python", "-m", "app.worker"]
-      "image" : "${aws_ecr_repository.bape_ecr_phase7.repository_url}:phase7"
+      "image" : "${data.aws_ecr_repository.bape_ecr.repository_url}:phase7"
       "essential" : true
       "environment" : [
         {
@@ -87,11 +87,11 @@ resource "aws_ecs_task_definition" "task_definition_worker" {
         },
         {
           "name" : "SQS_QUEUE_URL",
-          "value" : aws_sqs_queue.bape_cold_path_queue.url
+          "value" : data.aws_sqs_queue.bape_queue.url
         },
         {
           "name" : "APP_DATA_BUCKET_NAME",
-          "value" : aws_s3_bucket.bape_app_data_phase7.id
+          "value" : data.aws_s3_bucket.bape_bucket.id
         },
         {
           "name" : "AWS_REGION",

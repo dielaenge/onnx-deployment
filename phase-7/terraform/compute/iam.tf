@@ -62,12 +62,12 @@ resource "aws_iam_policy" "worker_policy" {
       {
         Action   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"]
         Effect   = "Allow"
-        Resource = aws_sqs_queue.bape_cold_path_queue.arn
+        Resource = data.aws_sqs_queue.bape_queue.arn
       },
       {
         Action   = ["s3:GetObject", "s3:PutObject"]
         Effect   = "Allow"
-        Resource = "${aws_s3_bucket.bape_app_data_phase7.arn}/*"
+        Resource = "${data.aws_s3_bucket.bape_bucket.arn}/*"
       }
     ]
   })

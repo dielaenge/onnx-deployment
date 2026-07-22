@@ -49,19 +49,3 @@ resource "aws_s3_bucket_notification" "bape_s3_notification" {
     aws_sqs_queue_policy.bape_cold_path_queue_policy
   ]
 }
-
-resource "aws_s3_bucket_cors_configuration" "cors_config_phase7_app_data_bucket" {
-  bucket = aws_s3_bucket.bape_app_data_phase7.id
-
-  cors_rule {
-    allowed_headers = ["*"]
-    allowed_methods = ["PUT", "GET", "HEAD"]
-    allowed_origins = [
-      "https://${aws_cloudfront_distribution.bape_phase7_frontend_s3_distribution.domain_name}",
-      "http://127.0.0.1:8000",
-      "http://localhost:8000"
-    ]
-    expose_headers  = []
-    max_age_seconds = 3000
-  }
-}
