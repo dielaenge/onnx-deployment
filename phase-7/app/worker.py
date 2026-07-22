@@ -99,8 +99,18 @@ def generate_spectrogram(processed_audio_path:str, full_spectrogram_path:str):
             local_standardized_slices.append(standardized_slice)
 
         locally_standardized_data = np.concatenate(local_standardized_slices, axis=1) #concatenate on time axis (16, N*100)
-        np.save(full_spectrogram_path, locally_standardized_data
-                )
+
+        # Package array into JSON
+        spec_payload = {
+            "shape": list(locally_standardized_data.shape),
+            "data": locally_standardized_data.tolist() # Converts NumPy array to native Python list
+        }
+
+        # Save as JSON file
+        with open(full_spectrogram_path, 'w') as f:
+            json.dump(spec_payload, f)
+
+
 # Upload wav and spectrogram to S3
 def upload_assets(bucket:str, processed_audio_path:str, processed_audio_key:str, full_spectrogram_path:str, spectrogram_key:str):
     s3_client.upload_file(processed_audio_path, bucket, processed_audio_key)
@@ -163,11 +173,11 @@ def main():
                     # set path variables for local processing on Linux
                     raw_audio_path=f"/tmp/raw_{file_name}"
                     processed_audio_path=f"/tmp/processed_{base_name}.wav"
-                    full_spectrogram_path = f"/tmp/spec_{base_name}.npy"
+                    full_spectrogram_path = f"/tmp/spec_{base_name}.json"
 
                     #set S3 keys
                     s3_processed_audio_object_key = f"processed/{base_name}.wav"
-                    s3_spectrogram_object_key = f"spectrograms/{base_name}.npy"
+                    s3_spectrogram_object_key = f"spectrograms/{base_name}.json"
 
                     logger.info("\n\n----------------------------------------\n\nSQS Message loaded and parsed:\n\nobject_key:%s\nmessage_id:%s\n\nbucket_name: %s\nreceipt_handle: %s\nfile_name: %s\nbase_name: %s\nraw_audio_path: %s\nprocessed_audio_path: %s\nfull_spectrogram_path: %s\ns3_processed_audio_object_key: %s\ns3_spectrogram_object_key: %s\n\n----------------------------------------", 
                     object_key, 
@@ -197,7 +207,11 @@ def main():
                     logger.info("Saved a local copy of cold-path spectrogram for parity verification under app/models/spec_cold_%s.npy", base_name)
 
                     # UPLOAD ASSETS     
-                    upload_assets(bucket=app_data_bucket, processed_audio_path=processed_audio_path, processed_audio_key=s3_processed_audio_object_key, full_spectrogram_path=full_spectrogram_path, spectrogram_key=s3_spectrogram_object_key)
+                    upload_assets(
+                        bucket=app_data_bucket, 
+                        processed_audio_path=processed_audio_path, processed_audio_key=s3_processed_audio_object_key, 
+                        full_spectrogram_path=full_spectrogram_path, 
+                        spectrogram_key=s3_spectrogram_object_key)
 
                     # CLEANUP
                     # 4. Delete received message from queue
