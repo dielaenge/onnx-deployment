@@ -64,7 +64,7 @@ resource "aws_vpc_endpoint" "sqs_interface" {
   security_group_ids  = [aws_security_group.vpc_endpoint_sg.id]
 
   tags = {
-    Name = "bape-vpc-cw-logs-interface"
+    Name = "bape-vpc-sqs-endpoint"
   }
 }
 
