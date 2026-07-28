@@ -1,137 +1,155 @@
-# Building an ML-OPs pipeline in different stages of elaboration for the BAPE Project
+# Deploying BAPE (Blind Acoustic Parameter Estimator), an Acoustic ML Model, from Laptop to Real-Time Cloud Service
 
-## **Status:** 🚧 Active Development (Phase 3: Security & Networking)
-
-### Current Objective
-Transitioning from a manual EC2 deployment (Phase 2) to a scripted, secure VPC architecture using AWS CLI.
-
-### Architecture State
-- [x] Custom VPC Design (10.16.0.0/16)
-- [x] Public/Private Subnet Isolation
-- [x] NAT Gateway implementation for private outbound traffic
-- [ ] Application Load Balancer (In Progress - blocked on SSL config)
-- [ ] HTTPS/Microphone Secure Context (Upcoming)
-
-### Key Documentation
-* currently in local development, commit to public repo is next 
+> An end-to-end AWS deployment portfolio: taking a research PyTorch model and evolving its
+> infrastructure through **seven progressively production-grade stages** — from a local ONNX
+> script to a distributed, real-time inference service on ECS Fargate with an async,
+> queue-driven processing path.
 
 ---
 
-## General project information (tbc)
+## Why this project
 
-### Problem:
-Scaling out the inference architecture for a Fraunhofer-backed research model in incremental stages, transforming a local Python script into a globally accessible, cost-optimized Serverless API. 
+As a career-changer targeting **AWS Cloud / DevOps Engineering** roles I took the chance to deploy one real workload seven different ways, each stage
+solving the shortcomings of the last. The result is a documented decision trail showing *how* and
+*why* an architecture matures.
 
-Stages:
+Each `phase-N-*/` directory is a **self-contained snapshot** of the architecture at that stage
+(its own IaC, dependencies, and decision log).
 
-1. local onnx deployment
-2. manual cloud deployment: deployed on EC2 instance, security groups, SSH instance access
-3. proper cloud deployment
-4. IaC/Serverless
-5. Containerize?
-6. Advanced output, analytics, logging, visualization
+## What it does (Final deployment)
 
-### **Phase 1: Local deployment with onnx runtime**
-- local deployment
-- CLI app and FastAPI endpoint
+You speak into your browser microphone. The service streams your audio to a cloud inference backend and returns, in real time, an estimate of the room's acoustic character — **T60 reverberation time** and **C50 clarity** across 7 frequency bands — rendered as live charts and a spectrogram. When you stop, the full recording is processed asynchronously for a higher-resolution result.
 
-### **Phase 2: Naive Cloud Deployment**
-- manually configured, click-Ops EC2 instance
-- configured AL2023 server to run FFmpeg as prebuilt app
-- updated `audio_processor.py` to use `librosa` instead of `soundfile`
+The ML model itself is a given. **What this repo is about is everything around it**: the AWS architecture, Infrastructure-as-Code, container orchestration, security, cost control, and CI/CD that turn a research script into a service.
 
-### **Phase 3: Production-Ready Cloud Deployment**
-*In this phase, the goal was to transition from the naive manual deployment of Phase 2 to a scalable, secure, and maintainable cloud architecture. This involved designing a custom VPC, isolating services in private subnets, and managing ingress traffic with an Application Load Balancer.*
+---
 
-#### Phase 3 - Target Architecture
+## Current architecture (Phase 7)
+
+The production stage splits inference into a latency-sensitive **hot path** and a decoupled, CPU-heavy **cold path**, so real-time WebSocket sessions are never starved by full-recording processing.
 
 ```mermaid
-
-graph TB
-  Internet([Internet Traffic])  
-    
-    subgraph VPC["VPC - 10.16.0.0/16"]
-      
-      IGW(🛜 Internet Gateway)
-
-      subgraph PrivateA["🔒 phase3-private-subnet-a - 10.16.1.0/24"]
-        EC2_2[EC2 Instance 2]
-      end
-     
-      subgraph PublicB["🔒 phase3-public-subnet-b - 10.16.2.0/24"]
-        ALB1[⚖️ Application Load Balancer]
-        NAT1[ NAT Gateway]
-      end
-    
-      subgraph PublicA["📡 phase3-public-subnet-a - 10.16.0.0/24"]
-        ALB2[⚖️ Application Load Balancer]
-        NAT2[ NAT Gateway]
-      end
-
-      RT_Public[📋 Route Table: Public<br/>0.0.0.0/0 → IGW]
-      RT_Private[📋 Route Table: Private<br/>0.0.0.0/0 → NAT]
-    
+flowchart TB
+    subgraph Client[Browser]
+      MIC[AudioWorklet mic capture]
     end
+      Client -- default --> CF
+      MIC[AudioWorklet mic capture] -->|200ms chunks / WS| CF
+      MIC -->|full WAV on stop| CF
 
-    %% Inbound Traffic
-    Internet -->|HTTPS:443| IGW
-    IGW --> ALB1
-    IGW --> ALB2
-    ALB1 --> |HealthCheck/<br/>LoadBalance|EC2_2
-    ALB2 --> |HealthCheck/<br/>LoadBalance|EC2_2
+    CF[CloudFront · OAC + cache behaviors]
+    CF -->|default| S3F[(S3 Frontend Bucket </br> index.html)]
 
-    %% Outbound Traffic
-    EC2_2 -.->|Outbound<br/>apt update, etc.|NAT1
-    EC2_2 -.->|Outbound<br/>apt update, etc.|NAT2
-    NAT1 -.-> IGW
-    NAT2 -.-> IGW
-
-    %% Route Table Associations
-    RT_Public -.->|Associated| PublicA
-    RT_Public -.->|Associated| PublicB
-    RT_Private -.->|Associated| PrivateA
-
-    %% Styling
-
-
+    subgraph VPC[VPC — 2 public / 2 private subnets, no NAT GW]
+      ALB[Application Load Balancer]
+      subgraph HOT[Hot path — Fargate bape_ecs_service]
+        WS[FastAPI WS · MelSpectrogram · T60/C50 concurrent ONNX]
+      end
+      subgraph COLD[Cold path — Fargate worker_ecs_service]
+        WK[· normalize with FFmpeg </br>· create full spectrogram]
+      end
+      VPCE[VPC Endpoints: S3 / ECR / Logs / SQS]
+    end
+    CF -->|/ws*, /api/*| ALB --> WS
+    WS -->|generate presigned PUT/GET URLs| S3D
+    S3D[(S3 Data Bucket </br> Folders: uploads/ processed/ spectrograms/<br/>1-day lifecycle)]
+    S3D -->| S3 Event Notif: ObjectCreated: uploads/| SQS[ SQS </br> bape-cold-path-queue]
+    SQS -- polls --> WK --> S3D
+    WK -.-> VPCE
+    WS -.-> VPCE
+    VPCE -- pulls image --> ECR[Elastic Container Registry]
+    VPCE -- writes logs --> CW[CloudWatch]
 ```
 
-### **Phase 4: Serverless Lambda Deployment**
-[TBD]
+**Hot path:** User starts recording using microphone → `AudioWorklet` is created and captures audio stream → 200 ms binary chunks are streamed over WebSocket and cached in an `offlineAudioBuffer` → another rolling 4 second buffer (required input length of onnx model) is created, filled and forwarded → a spectrogram is calculated using the `MelSpectrogram` class from `librosa` → spectrogram data is fed into T60 & C50 ONNX sessions, which run **concurrently** (`asyncio.gather`) every 200ms (→ rolling buffer is cut off by last 200ms to make space for new input) → JSON streamed back permanently for live D3 charts until user stops recording (→ triggering cold path processing)
 
-### **Phase 5: Containerized Deployment**
-[TBD]
-
-### **Phase 6: Real-Time Inference Deployment**
-[TBD]
-
-### **Phase 7: Distributed multi-model hot- and cold-path Deployment**
-[TBD]
-
-
+**Cold path:** On stop, the browser encodes data from `offlineAudioBuffer` to WAV client-side to take load off of backend → queries API of main container to get **presigned S3 URLs** → uploads entire audio **directly to S3** (bypassing the API) → an S3 event notification `ObjectCreated` event is sent to **SQS** → a dedicated Fargate worker container polls the queue → worker normalizes with FFmpeg, regenerates a full-resolution spectrogram, and writes files to S3 → client polls presigned URLs from which the processed files become available → when available, results are downloaded from S3, rendered to frontend → *if* successful, the event notification is deleted from the SQS queue.
 
 ---
+
+## The seven stages
+
+The project evolved over 7 stages to its latest design.
+
+| # | Stage | Problem it solves | Key (AWS) skills |
+|---|---|---|---|
+| **1** | Local ONNX deployment | make the model available locally for inference, either via CLI or FastAPI wrapper | ONNX Runtime, FastAPI, packaging |
+| **2** | Naive cloud deployment | make the model available in the cloud | EC2, security groups, SSH, FFmpeg/librosa |
+| **3** | Production-ready networking | make the model available at scale and securely | **VPC design, ALB, NATGW, HA across AZs**; also the ONNX export of the real BAPE model (was working with dummy model until here) |
+| **4** | Serverless | Make the model available in the cloud with minimal maintenance overhead and zero idle costs | **Lambda** container image, ECR, CloudFront/S3 split, presigned URLs |
+| **5** | Container orchestration | Make model available as a containerized application, reducing environment maintenance | **ECS Fargate + Terraform**, remote state, OIDC CI/CD GitHub Actions |
+| **6** | Production real-time | Make model available in real-time | **WebSockets** on ALB/CloudFront, Web Audio API, right-sizing |
+| **7** | Distributed hot/cold path | separate workload of real-time inference and post-processing to separate containers to improve performance  | **SQS**-driven async worker, second Fargate service, S3 events |
+
+Each stage's `docs/` holds a first-person decision log explaining the trade-offs.
+
 ---
 
-### *Detour: Integrating the real BAPE Model*
+## Capability map — where each skill is implemented
 
-At the start of phase 3 I was invited to the GitHub repo of the real world PyTorch model we are deploying in this project and were substituting with a dummy model until here. 
-This required a deep dive into the BAPE repository`s "code archaeology" to reverse-engineer the model's architecture and data preprocessing requirements from a complex, unfamiliar codebase.
+This is a reading guide, not a résumé: each row points to the phase where the capability is
+actually built, so you can jump straight to the code and its decision log.
 
-**The process involved:**
-- **Systematic Code Investigation:** Tracing Hydra `.yaml` configurations to identify the model's structure and dependencies.
-- **Environment Debugging:** Resolving a `TimeoutError` by downgrading from an unsupported Python 3.13 environment to a stable 3.11 build.
-- **Model Weight Surgery:** Writing a script to parse and rename keys in the pre-trained `.pth` file to match the reconstructed model architecture.
-- **Tensor Shape Correction:** Diagnosing and fixing a 4D tensor shape mismatch required by the model's `Conv2d` layers.
+| Capability | How it shows up here | Go to |
+|---|---|---|
+| **VPC networking** | 2 public / 2 private subnets across 2 AZs, IGW, NAT GW, then a NAT-free redesign using VPC endpoints | Phase 3 → 5–7 |
+| **Compute options** | Same workload on EC2, then Lambda (container image), then ECS Fargate — a deliberate compute-model comparison | Phase 2 · 4 · 5–7 |
+| **Edge & delivery** | CloudFront over a private S3 origin (OAC), with dedicated cache behaviors routing `/ws*` and `/api/*` to the ALB | Phase 4–7 |
+| **Async / messaging** | S3 `ObjectCreated` → SQS → a separate Fargate worker, decoupling batch work from real-time | Phase 7 |
+| **Infrastructure as Code** | Terraform with remote S3 state + native locking; later split into `persistent` vs `compute` modules | Phase 5–7 |
+| **IAM & security** | Resource-scoped least-privilege policies, GitHub OIDC federation (zero static keys), private subnets, OAC | Phase 3–7 |
+| **CI/CD** | GitHub Actions → ECR → ECS force-deploy, OIDC-authenticated and branch-locked per phase | Phase 5–7 |
+| **Cost & privacy engineering** | NAT-free VPC endpoints, `PriceClass_100` CDN, and a 24h S3 lifecycle expiry (see below) | Phase 3–7 |
 
-The successful result was a self-contained `exporter.py` script that produces a validated `speech_encoder.onnx` model, ready for deployment.
+### No database was a deliberate design choice: 
 
-**[➡️ The full, detailed story of the model export process in my Decision Log(Coming soon).](./docs/DECISION_LOG.md#x-embedding-bape)**
+This project intentionally has **no data tier**. The workload processes user microphone audio and estimates the spatial characteristics of the record surroundings, so **privacy is a hard requirement**: recordings are expired within 24 hours by an S3 lifecycle policy and nothing is persisted beyond that window. 
+Adding a database would have meant storing personal audio data I have no reason to keep. Choosing a **stateless, zero-retention architecture** is the more defensible engineering decision here — privacy-by-design over a checkbox.
 
+---
 
+## Repository layout
 
---> 2 Public Subnets for 2 ALB nodes (ALB HA) while having only 1 EC2 instance in 1 private subnet --> decision for dev purposes, doesn't make sense but is not possible cheaper (AWS requires HA for ALBs)
+```
+phase-1-local_deployment/        # ONNX runtime, CLI + FastAPI
+phase-2-manual_cloud_deployment/ # click-ops EC2
+phase-3-proper-infra/            # custom VPC, ALB, private subnets + BAPE→ONNX export
+phase-4-serverless_deployment/   # Lambda container image
+phase-5-container-orchestration/ # ECS Fargate + Terraform
+phase-6-production-ready/        # WebSocket real-time inference
+phase-7/                         # distributed hot-path + cold-path (current)
+```
 
-[ONNX model arch exported with Neutron.app]
+Infrastructure for phases 5–7 is defined in each phase's `terraform/` directory; deployment is
+automated via GitHub Actions (`.github/workflows/deploy-phase{5,6,7}.yml`).
 
-Links to all phases (architectures, learnings)
+---
+
+## Highlighted engineering decisions
+
+- **NAT-free private egress** — private subnets reach S3/ECR/CloudWatch/SQS via VPC endpoints
+  instead of a NAT Gateway, removing a significant fixed monthly cost.
+- **GitHub OIDC over static credentials** — CI/CD assumes a branch-locked IAM role via OIDC
+  federation; no long-lived AWS keys stored in GitHub.
+- **Presigned-URL claim-check pattern** — large audio bypasses the API server, uploading straight
+  to S3 to keep the request path light.
+- **Privacy-by-design** — a 24-hour S3 lifecycle expiry means user recordings are never retained.
+- **Hot/cold decoupling via SQS** — CPU-spiky batch work runs on its own Fargate service so it
+  can't degrade live WebSocket latency.
+
+---
+
+## Status & roadmap
+
+Phase 7 is the most advanced architecture and is **deployable end-to-end via the included
+Terraform + CI/CD**. To keep costs at zero between demos, the cloud stack is **not kept
+permanently running** — it is stood up from IaC on demand. Phases 1–6 are preserved as
+historical snapshots of the architecture at each stage.
+
+This repo is under active polish toward a portfolio-ready state. Planned next:
+
+- **Per-phase architecture diagrams** (Mermaid, rendered inline) — in progress
+- **Per-phase decision logs** distilled from the development record - in progress
+- [ ] **A demo for each phase** — reproducible IaC where practical, annotated screenshots / a
+      short screen recording at minimum
+- [ ] A one-command teardown/standup note per phase for cost-safe reproduction
