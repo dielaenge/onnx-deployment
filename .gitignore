@@ -101,13 +101,10 @@ private
 *.m4a
 *.mp3
 BAPE_src/
-phase-5-container-orchestration/app/models/bape_2026-04-13_15-13-22.onnx
-phase-5-container-orchestration/app/models/bape_2026-04-13_15-13-22.onnx.data
-phase-5-container-orchestration/app/models/bape_v2_standardized.onnx
-phase-5-container-orchestration/app/models/bape_v2_standardized.onnx.data
 *.mov
 *.in
-*.md
 archive/
 assets/
 models/
+*.npy
+david_spec.npy
