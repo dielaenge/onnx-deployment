@@ -120,9 +120,11 @@
         <!-- Grid Content -->
         <div class="grid md:grid-cols-2 gap-12">
             <div class="space-y-4">
-                <h3 class="text-xs font-bold uppercase tracking-widest text-emerald-500">Research Ojective</h3>
+                <h3 class="text-xs font-bold uppercase tracking-widest text-emerald-500">Research Objective</h3>
                 <p class="leading-relaxed text-sm text-slate-400">
-                    [PLACEHOLDER: Abstract. Describe goal of extracting T60, DRR, and C50 from single-channel recordings without reference signals.]
+                    Every room leaves a fingerprint on the sound inside it. Blind Acoustic Parameter Estimation (BAPE) is a machine learning model that listens to ordinary microphone audio and infers the physical acoustics of the space — with no reference signal, no test tones, and no knowledge of the room's dimensions. That's what "blind" means: it works from a single channel of everyday audio, where dedicated acoustic measurements are impractical. 
+                    <br>
+                    It predicts two parameters across seven frequency bands — T60, the reverberation time (how long a sound keeps echoing after its source stops), and C50, a clarity measure (how intelligible speech is at the listener's position). These estimates can improve hearing aids, speech-communication systems, and AR/VR audio.
                 </p>
             </div>
             <div class="space-y-4">
@@ -130,11 +132,14 @@
                 <p class="leading-relaxed text-sm text-slate-400">
                     Built on:
                     <ul class="list-disc list-inside mt-2 space-y-1 text-slate-500">
-                        <li>AWS ECS FARGATE (Compute)</li>
-                        <li>WebSocket Protocol (Streaming instead of REST)</li>
-                        <li>ONNX Runtime (Inference)</li>
+                        <li>AWS ECS FARGATE to run app and worker containers</li>
+                        <li>WebSocket Protocol for live-streaming mic input to preprocessing and inference</li>
+                        <li>ONNX Runtime to make model available for inference</li>
                         <li>S3 (Object Storage)</li>
-                        <li>Docker (Containerization)</li>
+                        <li>AWS SQS for message queuing and distribution</li>
+                        <li>Docker to containerize the application</li>
+                        <li>AWS CloudWatch</li>
+                        <li>AWS Elastic Container Registry</li>
                         <li>Terraform (Infrastructure as Code)</li>                        
                         <li>D3.js (Visualization)</li>
                     </ul>
@@ -146,14 +151,14 @@
         <div class="bg-slate-900/50 p-8 rounded-2xl border border-slate-800 space-y-4">
             <h3 class="text-xs font-bold uppercase tracking-widest text-purple-500">Methodology</h3>
             <p class="leading-relaxed text-sm text-slate-400">
-                [PLACEHOLDER: Explain sliding window approach. How model estimates parameters and confidence intervals (quantiles) for each frequency band.]
+                The model reads a mel-spectrogram — a compact time-frequency image of the incoming audio — through a transformer encoder. A rolling four-second window slides across the live stream, re-estimating the room roughly five times per second so the readout tracks changes in real time. Crucially, it doesn't emit a single number: for every frequency band it returns a distribution, pairing each T60/C50 estimate with quantiles that express the model's confidence. An ambiguous or noisy moment widens the interval rather than guessing — honest uncertainty instead of false precision.
             </p>
         </div>
 
         <!-- Footer -->
         <footer class="text-center pt-12 border-t border-slate-900">
             <p class="text-[10px] uppercase tracking-widest text-slate-600">
-                Research by Philipp • Deployment by David
+                Research by Philipp Götz • Deployment by David Goossens
             </p>
         </footer>
     </div>
