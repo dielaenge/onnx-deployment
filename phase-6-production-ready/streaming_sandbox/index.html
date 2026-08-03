@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>WebSocket Audio Streaming Sandbox</title>
+    </head>
+    <body>
+        <h1>WebSocket Audio Streaming Sandbox</h1>
+        <button type="button" onclick="startRecording()">Start Recording</button>
+        <button type="button" onclick="stopRecording()">Stop Mic</button>
+        <script>
+            let ws = new WebSocket("ws://localhost:8000/ws");
+            let audioCtx;
+            let micStream;
+
+            // chunkBuffer will be used to store 32000 samples / 2 seconds of audio and then send it
+            let chunkBuffer = [];
+
+            async function startRecording(){
+                // Get the stream of the mic
+                micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                // Set up mic to record at 16kHz sample rate
+                audioCtx = new AudioContext({ sampleRate: 16000 });
+                // set mic stream as source
+                const source = audioCtx.createMediaStreamSource(micStream);
+
+                // load external processor.js script into the AudioContext
+                await audioCtx.audioWorklet.addModule('processor.js');
+
+                // create the node, which serves as a controller/processor to the processor; it's our actual interface
+                const workletNode = new AudioWorkletNode(audioCtx, 'real-time-audio-processor');
+                // connect the node
+                source.connect(workletNode);
+
+                // Listen for messages from processor.js
+                workletNode.port.onmessage = function(event) {
+                    const rawFloats = event.data; // this is the left channel float32array defined in processor.js
+
+                    // Loop through rawFloats and push each value into chunkBuffer
+                    for (let i = 0; i < rawFloats.length; i++) {
+                        chunkBuffer.push(rawFloats[i]);
+                    }
+                    // If chunkBuffer.length >= 32000 (2 seconds at 16kHz):
+                    if (chunkBuffer.length >= 32000) {
+                        // cut the first 32000 samples from the chunk, if there is a remainder it stays in the chunkBuffer
+                        const chunkToSend = chunkBuffer.splice(0, 32000);
+                        // Convert chunkBuffer into a new Float32Array
+                        const payload = new Float32Array(chunkToSend);
+                        // send it over the websocket connect
+                        ws.send(payload);
+                    }
+                }
+            }
+
+            function stopRecording() {
+                // 1. Stop the microphone hardware tracks
+                if (typeof micStream !== 'undefined') {
+                    micStream.getTracks().forEach(track => track.stop());
+                }
+                
+                // 2. Stop the audio processing environment
+                if (typeof audioCtx !== 'undefined' && audioCtx.state !== 'closed') {
+                    audioCtx.close();
+                }
+                
+                // 3. Close the WebSocket connection to the server
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.close();
+                }
+                
+                console.log("Recording and WebSocket stopped cleanly.");
+            }
+        </script>
+    </body>
+</html>

@@ -1,0 +1,20 @@
+_target_: src.data.datamodule.DataModule
+
+train_url: data/dataset_mouth_eq_8s/train-{0000..0000}.tar
+valid_url: data/dataset_mouth_eq_8s/valid-{0000..0000}.tar
+test_url: data/dataset_mouth_eq_8s/test-{0000..0002}.tar
+
+data_tuple: [
+  "dry.pyd",
+  "wet.pyd",
+  "rir.pyd",
+  "dryspec.pyd",
+  "wetspec.pyd",
+  "rirspec.pyd",
+  "norm.pyd",
+  "snr.pyd",
+  "param.pyd",
+]
+
+batch_size: 8
+num_workers: 0

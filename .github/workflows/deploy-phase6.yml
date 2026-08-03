@@ -8,7 +8,7 @@ on:
 
 env:
   AWS_REGION: eu-central-1
-  ECR_REPOSITORY: bape_phase6_repo
+  ECR_REPOSITORY: bape-phase6-inference
   ECS_CLUSTER: bape_cluster
   ECS_SERVICE: bape_ecs_service
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -41,7 +41,7 @@ jobs:
     - name: Download ML Model from S3
       run: |
         echo "Downloading ONNX model artifacts from S3..."
-        aws s3 cp s3://bape-app-data-phase5-davidg/models/ app/models/ --recursive
+        aws s3 cp s3://bape-app-data-phase6-davidg/models/ app/models/ --recursive
 
     - name: Login to Amazon ECR
       id: login-ecr

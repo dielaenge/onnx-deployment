@@ -1,0 +1,16 @@
+_target_: src.data.datamodule.DataModule
+
+train_url: data/dataset_speech/train-{0000..0015}.tar
+valid_url: data/dataset_speech/valid-{0000..0001}.tar
+test_url: data/dataset_speech/test-{0000..0001}.tar
+
+data_tuple: [
+  "wetspec.pyd",
+  "rirspec.pyd",
+  "norm.pyd",
+  "snr.pyd",
+  "param.pyd",
+]
+
+batch_size: 128
+num_workers: 8

@@ -1,0 +1,4 @@
+# ALL PROVIDER BLOCKS AND CONFIGURATION
+
+provider "aws" {
+}

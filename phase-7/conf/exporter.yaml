@@ -1,0 +1,19 @@
+# Config for param_estimator-onnx_exporter.py
+
+# weights paths are relative to the project root
+run_cfg: assets/results/param/2025-11-18_17-40-57/config.yaml
+model_weights: assets/results/param/2025-11-18_17-40-57/model.pth
+
+# run_cfg: assets/results/param/2025-11-18_19-33-41/config.yaml
+# model_weights: assets/results/param/2025-11-18_19-33-41/model.pth
+
+# absolute paths for reference audio and output tuple (user-provided)
+ref_audio: assets/wet_speech.wav
+output_tuple: assets/reference_outputs/reference_output_t60.pth
+# output_tuple: assets/reference_outputs/reference_output_c50.pth
+
+# where to write exported ONNX files (relative to project root)
+export_dir:  app/models/
+
+# parameter tolerance
+tolerance: 0.05

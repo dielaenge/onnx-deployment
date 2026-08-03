@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BAPE | Blind Acoustic Parameter Estimator | PHASE 7 - HOT & COLD PATH DEPLOYMENT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .recording-glow { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+    </style>
+</head>
+
+<body class="bg-[#020617] text-slate-200 min-h-screen flex flex-col items-center justify-center p-6 font-sans">
+    <div class="max-w-full lg:w-9/12 space-y-8 text-center">
+        <div class="space-y-2">
+            <h1 class="text-6xl font-black tracking-tighter bg-gradient-to-br from-white to-slate-500 bg-clip-text text-transparent italic">BAPE</h1>
+            <p class="text-slate-500 text-xs uppercase tracking-[0.3em] font-bold">Blind Acoustic Parameter Estimator</p>
+        </div>
+
+        <div class="glass rounded-[2rem] p-8 space-y-8 shadow-2xl">
+            <div class="flex items-center justify-center space-x-3">
+                <div id="spinner" class="hidden h-4 w-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <div id="status-text" class="text-xs font-bold text-blue-500 uppercase tracking-widest">System Ready</div>
+            </div>
+            <!-- Mic Section -->
+            <div class="flex flex-col items-center space-y-4">
+                <button id="mic-btn" class="h-24 w-24 rounded-full bg-slate-900 flex items-center justify-center transition-all duration-500 hover:border-blue-500/50 border-2 border-slate-800 shadow-inner">
+                    <svg id="mic-icon" xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 1v11m0 0a4 4 0 004-4V5a4 4 0 00-8 0v3a4 4 0 004 4z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 10v1a7 7 0 01-14 0v-1m10 8a3 3 0 11-6 0" />
+                    </svg>
+                </button>
+            <p id="rec-text" class="text-slate-500 text-sm">Tap microphone to record.</p>
+        </div>
+
+            <!-- Result Area -->
+            <div id="result-area" class="hidden space-y-6 pt-4 border-t border-slate-800 text-left w-full">
+
+
+                <!-- TOP: The Outputs (Side-by-Side Dual Dashboards) -->
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 w-full">
+                    
+                    <!-- Left Column: T60 Reverberation Decay -->
+                    <div class="space-y-2 bg-slate-900/40 p-4 rounded-2xl border border-emerald-500/10">
+                        
+                        <h3 class="text-emerald-500 uppercase text-[10px] font-black tracking-widest">T60 Decay Timeline (Seconds)</h3>
+                        <div class="flex flex-col md:flex-row gap-4 h-[550px]">
+                        <div id="t60-chart-container" class="w-full md:w-3/4 h-full relative bg-black/40 rounded-xl border border-emerald-500/5">
+                            <!-- TOOL TIP -->
+                            <div id="t60_params-tooltip" class="absolute opacity-0 pointer-events-none bg-slate-900 border border-slate-800 p-2 rounded text-xs text-white z-50 rounded-xl shadow-xl">
+                                <div class="tt-header font-bold text-emerald-400"></div>
+                                <div class="tt-value text-slate-300 mt-1"></div>
+                            </div>
+                        </div>
+                        <div id="t60_params-legend" class="w-full md:w-1/4 grid grid-cols-2 md:grid-cols-1 gap-1 bg-slate-900/50 p-3 rounded-xl overflow-y-auto max-h-full"></div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: C50 Clarity Index -->
+                    <div class="space-y-2 bg-slate-900/40 p-4 rounded-2xl border border-emerald-500/10">
+                        <h3 class="text-emerald-500 uppercase text-[10px] font-black tracking-widest">C50 Clarity Timeline (dB)</h3>
+                        <div class="flex flex-col md:flex-row gap-4 h-[550px]">
+                            <div id="c50-chart-container" class="w-full md:w-3/4 h-full relative bg-black/40 rounded-xl border border-emerald-500/5">
+                                <!-- TOOL TIP -->
+                                <div id="c50_params-tooltip" class="absolute opacity-0 pointer-events-none bg-slate-900 border border-slate-800 p-2 rounded text-xs text-white z-50 rounded-xl shadow-xl">
+                                    <div class="tt-header font-bold text-blue-400"></div>
+                                    <div class="tt-value text-slate-300 mt-1"></div>
+                            </div>
+                            </div>
+                            <div id="c50_params-legend" class="w-full md:w-1/4 grid grid-cols-2 md:grid-cols-1 gap-1 bg-slate-900/50 p-3 rounded-xl overflow-y-auto max-h-full"></div>
+                        </div>
+                    </div>
+                    
+                </div>
+
+                <div class="lg:col-span-2 bg-slate-900/50 p-4 rounded-xl border border-slate-800">
+                    <h3 class="text-xs font-bold uppercase text-slate-500 mb-2">Live Spectrogram (Last 200ms)</h3>
+                    <canvas id="spectrogram-canvas" width="800" height="160" class="w-full h-32 bg-black rounded-lg"></canvas>
+                </div>
+                    
+                <div id="coldPathResults" class="hidden">
+                    <!-- audioPlayer(Right, 3 columns) -->
+                    <div class="space-y-2 md:col-span-1">
+                        <h3 class="text-xs font-bold uppercase text-slate-500">Input Audio</h3>
+                        <audio id="audio-player" controls class="w-full h-10 opacity-80 hover:opacity-100 transition-opacity"></audio>
+                    </div>
+
+                    <!-- Cold Path Spectrogram Canvas -->
+                    <div class="space-y-2 md:col-span-3">
+                        <h3 class="text-xs font-bold uppercase text-slate-500">Full Session Spectrogram</h3>
+                        <canvas id="cold-path-spectrogram-canvas" class="rounded-lg border border-slate-700 w-full h-32 bg-black opacity-80"></canvas>
+                    </div>
+                </div>
+              
+                
+              <details class="group bg-black/40 rounded-xl border border-emerald-500/10 overflow-hidden">
+                    <summary class="p-4 cursor-pointer font-bold text-xs uppercase tracking-widest text-emerald-500 hover:bg-emerald-500/5 transition-colors">
+                        Show Raw JSON Data
+                    </summary>
+                    <pre id="json-result" class="p-4 text-[10px] font-mono overflow-x-auto text-emerald-400/80 max-h-60 overflow-y-auto"></pre>
+                </details>
+            </div>
+        </div>
+    </div>
+    
+    <!-- About Section (Below the Fold) -->
+<section id="about-section" class="min-h-screen bg-slate-950 text-slate-300 p-8 lg:p-24 flex flex-col items-center justify-center border-t border-slate-900 relative z-10">
+    <div class="max-w-3xl w-full space-y-12">
+        
+        <!-- Header -->
+        <div class="space-y-4 text-center">
+            <h2 class="text-4xl font-black tracking-tighter text-white">Blind Acoustic Parameter Estimation</h2>
+            <div class="h-1 w-20 bg-emerald-500 mx-auto rounded-full"></div>
+            <p class="text-xl text-slate-400 font-light italic">"Hearing the room."</p>
+        </div>
+
+        <!-- Grid Content -->
+        <div class="grid md:grid-cols-2 gap-12">
+            <div class="space-y-4">
+                <h3 class="text-xs font-bold uppercase tracking-widest text-emerald-500">Research Objective</h3>
+                <p class="leading-relaxed text-sm text-slate-400">
+                    Every room leaves a fingerprint on the sound inside it. Blind Acoustic Parameter Estimation (BAPE) is a machine learning model that listens to ordinary microphone audio and infers the physical acoustics of the space — with no reference signal, no test tones, and no knowledge of the room's dimensions. That's what "blind" means: it works from a single channel of everyday audio, where dedicated acoustic measurements are impractical. 
+                    <br>
+                    It predicts two parameters across seven frequency bands — T60, the reverberation time (how long a sound keeps echoing after its source stops), and C50, a clarity measure (how intelligible speech is at the listener's position). These estimates can improve hearing aids, speech-communication systems, and AR/VR audio.
+                </p>
+            </div>
+            <div class="space-y-4">
+                <h3 class="text-xs font-bold uppercase tracking-widest text-blue-500">Deployment</h3>
+                <p class="leading-relaxed text-sm text-slate-400">
+                    Built on:
+                    <ul class="list-disc list-inside mt-2 space-y-1 text-slate-500">
+                        <li>AWS ECS FARGATE to run app and worker containers</li>
+                        <li>WebSocket Protocol for live-streaming mic input to preprocessing and inference</li>
+                        <li>ONNX Runtime to make model available for inference</li>
+                        <li>S3 (Object Storage)</li>
+                        <li>AWS SQS for message queuing and distribution</li>
+                        <li>Docker to containerize the application</li>
+                        <li>AWS CloudWatch</li>
+                        <li>AWS Elastic Container Registry</li>
+                        <li>Terraform (Infrastructure as Code)</li>                        
+                        <li>D3.js (Visualization)</li>
+                    </ul>
+                </p>
+            </div>
+        </div>
+
+        <!-- Methodology -->
+        <div class="bg-slate-900/50 p-8 rounded-2xl border border-slate-800 space-y-4">
+            <h3 class="text-xs font-bold uppercase tracking-widest text-purple-500">Methodology</h3>
+            <p class="leading-relaxed text-sm text-slate-400">
+                The model reads a mel-spectrogram — a compact time-frequency image of the incoming audio — through a transformer encoder. A rolling four-second window slides across the live stream, re-estimating the room roughly five times per second so the readout tracks changes in real time. Crucially, it doesn't emit a single number: for every frequency band it returns a distribution, pairing each T60/C50 estimate with quantiles that express the model's confidence. An ambiguous or noisy moment widens the interval rather than guessing — honest uncertainty instead of false precision.
+            </p>
+        </div>
+
+        <!-- Footer -->
+        <footer class="text-center pt-12 border-t border-slate-900">
+            <p class="text-[10px] uppercase tracking-widest text-slate-600">
+                Research by Philipp Götz • Deployment by David Goossens
+            </p>
+        </footer>
+    </div>
+    </section>
+    <script src="app.js"></script>
+</body>
+</html>

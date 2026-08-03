@@ -1,0 +1,40 @@
+{
+    "Version": "2012-10-17",
+    "Statement":[
+        {
+            "Sid": "AllowECRAuth",
+            "Effect":"Allow",
+            "Action":"ecr:GetAuthorizationToken",
+            "Resource":"*"
+        },
+        {
+            "Sid": "AllowECRPull",
+            "Effect":"Allow",
+            "Action":[
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:BatchGetImage"
+                ],
+            "Resource":"arn:aws:ecr:eu-central-1:609662023678:repository/bape-ecr-repo"
+        },
+                {
+            "Sid": "AllowLogging",
+            "Effect":"Allow",
+            "Action":[
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:PutLogEvents"
+                ],
+            "Resource":"*"
+        },
+        {
+            "Sid": "AllowS3Upload",
+            "Effect":"Allow",
+            "Action":[
+                "s3:PutObject",
+                "s3:GetObject"
+                ],
+            "Resource":"arn:aws:s3:::bape-lambda-static-frontend/results/*"
+        }
+    ]
+}

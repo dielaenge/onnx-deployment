@@ -1,0 +1,9 @@
+_target_: src.data.datamodule.DataModule
+
+train_url: data/dataset_rirs/train-{0000..0000}.tar
+valid_url: data/dataset_rirs/valid-{0000..0000}.tar
+test_url: data/dataset_rirs/test-{0000..0000}.tar
+
+data_tuple: ["rir.pyd", "spec.pyd", "norm.pyd", "param.pyd"]
+batch_size: 128
+num_workers: 4
