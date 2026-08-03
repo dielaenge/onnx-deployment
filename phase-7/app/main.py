@@ -25,6 +25,9 @@ import time
 # Identify Base Directory
 BASE_DIR = Path(__file__).resolve().parent
 
+# env varibale to flag debugging and save a dump of the calculated spectrogram; set to 1, true or yes to run scripts/compare_pipelines.py.
+DEBUG_SPEC_DUMP = os.environ.get("DEBUG_SPEC_DUMP", "").lower() in ("1", "true", "yes")
+
 # Identify src directory for static files, which are used when running locally
 static_dir = BASE_DIR.parent / "src"
 
@@ -152,7 +155,10 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 # create spectrogram slice; leave first dimension at index 0 as is (16); slice second dimension to only last 100 frames (100 frames * 32 (hop size) = 3200 samples or 200ms);transform to list as I will send it via JSON which doesn'tz support numpy arrays                    
                 
                 spectrogram_latest100frames = standardized_spectrogram[:,-100:]
-                accumulated_spec.append(spectrogram_latest100frames)
+                
+                # skip debugging spec dump if flag is off
+                if DEBUG_SPEC_DUMP:
+                    accumulated_spec.append(spectrogram_latest100frames)
                 
                 spectrogram_latest100frames = spectrogram_latest100frames.tolist()
 
@@ -209,7 +215,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         logger.exception("Error in Websocket connection: %s", e)
 
     finally:
-        if len(accumulated_spec) > 0:
+        if DEBUG_SPEC_DUMP and len(accumulated_spec) > 0:
             spec_hot = np.concatenate(accumulated_spec, axis=1) #stack on second dimension; shape is (nmels, time) or (16,100)
             np.save(BASE_DIR / "models" / f"spec_hot_{session_id}.npy", spec_hot)
 
