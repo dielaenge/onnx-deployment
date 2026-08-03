@@ -26,7 +26,6 @@ COPY requirements.txt .
 
 #install CPU-only dependencies for torch to save space and time / download from explicit url to avoid dowonloading cuda backend; step separated from dependency installations to prevent conflicts
 RUN pip install --upgrade pip \ 
-    && pip install torch==2.2.2 torchaudio==2.2.2 --index-url https://download.pytorch.org/whl/cpu \ 
     && pip install --no-cache-dir -r /app/requirements.txt
 
 # copy code
