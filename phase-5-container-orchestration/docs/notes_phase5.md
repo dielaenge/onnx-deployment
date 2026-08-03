@@ -347,14 +347,39 @@ EXECUTION:
 
 ## Phase 5 Finish
 
-Accomplished:
+*Accomplished:*
 - Terraform infrastructure productive
 - CI/CD pipeline operates on git push
 - Inference bug fix implemented
 
-To Do: 
+*To Do (phase 6):*
 - right sizing resources
+- real-time inference via websockets
+- architectural improvements
+  - don't execute all tasks sequentially (uploading, transcoding, generating presigned urls, running inference…) but use queues (and/or other best practice tools) to improve preformance
+  - review and improve costs, performance, security, availability etc
 
+*To Do (onnx-acoustic Project at v1.0.0: ready for first applications):*
+- review and polish 
+  - all phases of project including
+    - docs
+    - code base
+  - GitHub repo
+
+- create 
+  - personal website introducing
+    - the project
+    - me
+  - missing artifacts in project
+    - digestable texts
+    - architecture and other relevant visualizations
+  - working endpoints for all phases or footage of phase endpoints working
+
+- Refactored terraform folder
+My tf file structure was based on some best practices I found from Hashicorp but couldn't find again ad-hoc, so now I feel like we we are in transitiionig state. 
+I pciked apart the main.tf and created ecr.tf, ecs.tf, elb.tf, iam.tf, routing.tf, security-groups.tf, vpc.tf and vpc-endpoints.tf by copy pasting the according blocks from main.tf to the separate tf files.
+
+Before making the transition to phase 6 I wanted to do the rightsizing so I decided to go back to phase 5 on feat/container-orchestration (where the phase 6 folder is still in untracked status, though I added and pushed it to feat/production-ready, the phase 6 branch) and ran tf apply and then ran our build and deploy to ECS Action because before applying it was failing with Could not assume role with OIDC: No OpenIDConnect provider found in your account for https://token.actions.githubusercontent.com an dI don't know how much it added to failure but GitHub asked from which branch I wanted to run the workflow. FIrst I chose main. For the second run, after running tf apply I set this to feat/production-ready. The second run succeeded. I ran a couple of inferences with the 3.5MB mp3 and I got some numbers in container insights but I struggle to read them. I can see that not only one but two containers are in my cluster. The max CPU utilization I can see is around 36% and max Memory utilization around 20%
 
 ```mermaid
 flowchart LR

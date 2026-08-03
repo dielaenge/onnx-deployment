@@ -670,7 +670,7 @@ Quick Fix – Separation of concerns:
   1. load static assets from S3 / CloudFront --> frontend instantly available
   2. Wait time occurs when file / recording is processed --> should feel more acceptable
 
-#### 3.6.2.1. Updated Traffic Flow
+##### 3.6.2.1. Updated Traffic Flow
 
 ```Mermaid
 ---
@@ -886,10 +886,12 @@ As described in 3.6.5.1., I later tagged this committed version as `phase-4.2-au
 
 #### 3.6.5. Further learnings and edits
 
-#### 3.6.5.1. Serverless Machine Learning Inference
+##### 3.6.5.1. Serverless Machine Learning Inference : Cold starts
 The resulting app is a major improvement in comparison to the phase-3-infrastructure in terms of cost and maintanance BUT even though the Lambda function itself delivers inference results instantaneously, the cold-start times are not acceptible for a frontend suggesting immediate or even real-time results.
 Fixing this with Provisioned Concurrency (with scheduled down and up times), setting up EventBridge events to ping the function regularly or considering Lambda Snap Starts, showed me the constraints of using Lambda functions for (near) real-time inference.
 The boot time of the Lambda function of 15-30 seconds is actually good but not adequate for a user experience suggesting to be "always on". In a setting where the user doesn't wait for the results, i.e. expecting them per mail, this would be much better, but as the app is perspectively meant to be a real-time inference machine, which still has acceptible cost, scaling and latency constraints, I plan on finding such a solution in phase 5.
+
+I added a pseudo-progress response from the frontend when finishing this phase.
 
 ##### 3.6.5.2. Versioning and git Tagging
 I clearly felt an increase in speed while iterating the app and producing incremental improvements. Initially I planned on having 5 different deployment versions after all but at this point I wanted a tighter handle on versions and make them available for demonstration and comparisons in rertrospect/during job application process.
@@ -903,7 +905,7 @@ I used `git log …` and `git tag …` to get an overview of my git versioning h
 - phase-4.1-decoupled
 - phase-4.2.audio-and-spectrogram-output
 
-##### 3.6.5.3. Solving memory constraints with Pre-Signed URLs
+##### 3.6.5.3. Solving memory constraints with Pre-Signed URLs // Claim Checking
 
 As the buffer of the Lambda function is limited to 6 MB, the function crashes already with smaller files like a 4MB mp3.
 Also, encoding the model WAV and spectrogram input in the backend, send it to the frontend and encode it with JavaScript puts a lot of overhead on the frontend.
@@ -1011,7 +1013,7 @@ aws s3 api put-bucket-lifecycle-configuration \
 --lifecycle-configuration file://src/lifecycle-configuration-policy.json
 ```
 
-##### Add function to upload files and generate presigned URLS to `api.py`
+###### Add function to upload files and generate presigned URLS to `api.py`
 Now I build the new function in `api.py`:
 
 ```Python
@@ -1165,31 +1167,191 @@ In the frontend/index.html I refactor the JavaScript to source the audio and png
         (…)
 ```
 
-Just to not loose touch with where we are at: Assuming my edits are correct I would continue with:
-- commiting the changes to git
-- build a new docker container image and tag it
-- push it to ECR
-- update the Lambda function to pull the updated container
+Before testing the updates I …
 
-  - how does the boto client use my AWS credentials?
-
-  As I don't do any manual credential exchange but use aws sso I export my temporary credentials as enironment variables like this:
+… create a new version of the `bape-permissions-policy.json` and set it as default.
 
 ```zsh
-export ${aws configure export-credentials --format env}
+aws iam create-policy-version --policy-arn $BAPE_PERMPOL_ARN --policy-document file://src/bape-permissions-policy.json --set-as-default 
 ```
-I don't state my profile because it's already set in `direnv`.
-Now I can pass my AWS credentials as environment variables when running the image:
+
+… build and tag a new Docker image: 
+```zsh
+docker build --no-cache --platform linux/amd64 --sbom=false --provenance=false -t bape-lambda:2025-03-02_v3-s3-claim-check .
+```
+
+… creat a tag for ECR
+```zsh
+docker tag bape-lambda:2025-03-02_v3-s3-claim-check $ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/bape-ecr-repo:2025-03-02_v3-s3-claim-check
+```
+
+… push tag to repo:
+```zsh
+docker push $ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/bape-ecr-repo:2025-03-02_v3-s3-claim-check
+```
+
+
+- update the Lambda function code
 
 ```zsh
-docker run --platform linux/amd64 -p 9000:8080 \
-  -e AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID \
-  -e AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY \
-  -e AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN \
-  -e AWS_DEFAULT_REGION=eu-central-1 \
-  bape-lambda:latest
+aws lambda update-function-code --function-name bape-lambda-function --image-uri $ACCOUNT_ID.dkr.ecr.eu-central-1.amazonaws.com/bape-ecr-repo:2025-03-02_v3-s3-claim-check
 ```
 
+- update the frontend object in s3:
+```zsh
+aws cp frontend/index.html s3://bape-lambda-static-frontend/index.html
+```
+
+
+###### Testing the claim check
+
+Calling the frontend via the Cloudfront URL, starting the model and running an inference with a 4.5MB mp3 which lead the function to break because of insufficient memory, now ran without complications and the JSON now included the PreSigned URLs.
+
+But the contents failed to load (screenshot)["screenshots/2026-03-02_claim-echeck-test.png"]. When maually opening the Presigned URLS the API made the problem clear:
+
+```XML
+<Error>
+<Code>AccessDenied</Code>
+<Message>User: arn:aws:sts::609662023678:assumed-role/bape-lambda-exec-role/bape-lambda-function is not authorized to perform: s3:GetObject on resource: "arn:aws:s3:::bape-lambda-static-frontend/results/5dbe5aa5-aae9-4ca9-9047-8cc9aa1b189b_spectrogram.png" because no identity-based policy allows the s3:GetObject action</Message>
+<RequestId>DJX492JDVT32GKK7</RequestId>
+<HostId>tp9yJycSh/DpE15+t8ngYjUokodnZbGFoEKK0w7xJaxL9rnx/hm+HdlHO2sGnxm4jtwN6Df6EDFyl40I6B0btvP8UIPAlf4rQ+LyoVmMJHE=</HostId>
+</Error>
+```
+
+So I needed to update the bape-permissions-policy.json to have S3:getObject permissions. This permission is inherited by the Presigned URLs.
+
+Testing successful.
+
+Minor frontend edits: simulate cold start progress.
+
+##### 3.6.5.4. Moving on to a sliding processin window (Merge with 3.6.3)
+
+---
+feedback call 01-03-2026:
+- real benefit from dynamic results
+
+- quality of acoustic fingerprint is described in `quantiles`
+- confidence in estimated parameters depends on quality of acoustic fingerprint
+
+- received paper on March 3
+---
+
+
+To evolove to a dynamic app allowing for multiple related inference results, a timeline of estimated parameters, I need to 
+
+- change the Python backend to run the inference on slices of the audio input, thus first slicing the audio input before processing all slices
+- restructure the JSON response to include inference results with timestamps, this will be foundational for time-series
+- visualize the results (wav-form, confidence (quantiles), time-based blindly estimated parameters)
+
+***Defining the windows***
+Overlapping input windows, i.e. 1-4 seconds, 3-7 seconds, 5-9 seconds instead of 1-4 sec, 4-8sec, 8-12 sec,…, will produce a smoother graph but will also increase the processing power required.
+
+*Terms:*
+- Temporal Resolution: The frequency of results (e.g., "One inference per second").
+- Striding/Hopping: The distance the window moves between inferences.
+- Inference Latency Per Window: The time it takes for one pass through the ONNX model.
+- Confidence Envelope: The visual representation of the Quantiles around the Estimated Parameters.
+
+I choose to use a temporal resolution of 1 inference per 4 seconds of input. Meanwhile the stride of the sliding window will be two seconds. This should double the compute of slicing the input into separate, non-overlapping 4 second inputs, because everything but the last and first two seconds will be processed twice.
+
+```Mermaid
+
+flowchart LR
+
+A[audio_array]
+C{transform_audio_to_spectrogram}
+E[clean_wav]
+F[spectrogram_png]
+
+H{_normalize_audio_with_ffmpeg}
+I{generate_spectrogram_image}
+J{generate_vector}
+K{upload_artifact_and_get_presigned_url}
+L{melspec_preprocessor}
+
+N[audio_spec/spectrogram_4d]
+O[png_url, wav_url]
+P[model outputs: estimated params, quantiles]
+Q{generate_vector_endpoint}
+R(Client)
+S[API]
+
+R -->|audio input| S
+
+subgraph audio_processor.py
+C --> H 
+H --> E
+C --> I --> F
+C --> L
+L -->|np.expand_dims| N
+H --> A
+A --> L
+end
+
+subgraph api.py
+  S -->|audio_file| Q
+  Q --> C
+  N --> J
+  E --> K
+  F --> K
+end
+
+subgraph index.html
+  J --> P
+  K --> O
+end
+```
+
+
+Pseudo-Code:
+- define a function to slice audio into windows
+  - define a window and stride size
+  - define empty list `slices`
+  - define empty list `timestamps`
+  - loop through all possible values of `i` as long as `i` is in the range starting at 0 and ending on number of last sample; increment `i` by `stride_size`; repeat the following:
+    - for each i, create a chunk:
+      - set `start` to i
+      - set `end` to i + window_size
+      - define `chunk` as array from `start` to `end`
+    - if the `chunk` is smaller than window size
+      - define padding as (window_size - chunk_size)
+      - update `chunk` to be padded at the end by defined padding, fill with constant value
+    
+    - for each i, append the chunk to the slices list
+    - for each i, append a timestamp giving the start time in seconds
+      - convert samples to seconds (i/16000)
+      
+    
+    - return list of slices and list of timestamps
+
+- in the preprocessing `transform_audio_to_spectrogram`, pass in the list of slices stack them vertically at axis=0
+
+
+- I will use range(start, stop, step) to define slices 
+  - as we don't talk about time in seconds but number of samples, 1 second consists of 16000 samples, thus the window is 64000 samples large
+  - We start at 0, end at 64000 and step by 32000 samples (2 seconds):
+  `range(0,64000,32000)`` -> I have to find out how this is defined when "moving"
+  - when we have the normalized audio in byte samples we can slice it
+
+```Python
+def slice_audio_into_windows(audio_array: np.ndarray, sr: int = 16000):
+  window_size = 4 * sr
+  stride_size = 2 * sr
+
+  total_size=audio_array.size
+
+  for i in range(0, total_size - window_size + 1, stride_size):
+    start = i 
+    end = i + window_size
+    slice = audio_array[start:end]
+
+
+```
+
+Then I would batch the result into one tensor and run the model once.
+The api.py needs to be refactored to accomodate for the result of the batch inference session
+
+#### 3.6.6. Refactoring / Renaming
 
 
 ## 4. Phase finish
