@@ -1,6 +1,11 @@
 #--------------------------
 # LOAD BALANCING
 #--------------------------
+
+data "aws_ec2_managed_prefix_list" "cloudfront" {
+  name = "com.amazonaws.global.cloudfront.origin-facing"
+}
+
 # ALB Security Group 
 resource "aws_security_group" "bape_alb_sg" {
   name        = "BAPE ALB SG"
@@ -12,10 +17,10 @@ resource "aws_security_group" "bape_alb_sg" {
   }
 }
 
-# ingress: incoming HTTP/Port 80 (must be changed to HTTPS/443) traffic from all IPV4 addresses allowed
+# ingress: incoming only from cloudfront distribution allowed
 resource "aws_vpc_security_group_ingress_rule" "bape_alb_sg_ingress" {
   security_group_id = aws_security_group.bape_alb_sg.id
-  cidr_ipv4         = "0.0.0.0/0"
+  prefix_list_id = data.aws_ec2_managed_prefix_list.cloudfront.id
   from_port         = 80
   ip_protocol       = "tcp"
   to_port           = 80
