@@ -108,3 +108,4 @@ assets/
 models/
 *.npy
 david_spec.npy
+Claude.md
