@@ -10,6 +10,13 @@ import wave
 import shutil
 
 from .audio_utils import MelSpectrogram
+from pathlib import Path
+
+# Identify Base Directory
+BASE_DIR = Path(__file__).resolve().parent
+
+# set to 1, true or yes for debugging; default is ""
+DEBUG_SPEC_DUMP = os.environ.get("DEBUG_SPEC_DUMP", "").lower() in ("1", "true", "yes")
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -203,8 +210,9 @@ def main():
                     generate_spectrogram(processed_audio_path=processed_audio_path, full_spectrogram_path=full_spectrogram_path)
 
                     # Save a copy of the spectrogram to models/ folder before any uploads or cleanups
-                    shutil.copy(full_spectrogram_path, f"app/models/spec_cold_{base_name}.npy")
-                    logger.info("Saved a local copy of cold-path spectrogram for parity verification under app/models/spec_cold_%s.npy", base_name)
+                    if DEBUG_SPEC_DUMP:
+                        shutil.copy(full_spectrogram_path, BASE_DIR / "models" / f"spec_cold_{base_name}.npy")
+                        logger.info("Saved a local copy of cold-path spectrogram for parity verification under %s/models/spec_cold_%s.npy", BASE_DIR, base_name)
 
                     # UPLOAD ASSETS     
                     upload_assets(
