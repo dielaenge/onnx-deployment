@@ -23,9 +23,9 @@ resource "aws_iam_role" "ecs_task_execution_role" {
   }
 }
 
-# TASK ROLE INCLUDING TRUST POLICY // GRANTING PERMISSIONS TO APPLICATION CODE
+# MAIN TASK ROLE INCLUDING TRUST POLICY // GRANTING PERMISSIONS TO APPLICATION CODE
 resource "aws_iam_role" "ecs_task_role" {
-  name = "bape-task-role"
+  name = "bape-main-task-role"
   assume_role_policy = jsonencode(
     {
       Version = "2012-10-17"
@@ -44,18 +44,38 @@ resource "aws_iam_role" "ecs_task_role" {
   }
 }
 
-# ATTACH MANAGED POLICY TO TASK EXECUTION ROLE
-resource "aws_iam_role_policy_attachment" "execution_role_policy" {
-  role       = aws_iam_role.ecs_task_execution_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+# WORKER TASK ROLE
+resource "aws_iam_role" "ecs_worker_task_role" {
+  name = "bape-worker-task-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "ecs-tasks.amazonaws.com" }
+    }]
+  })
+  tags = { 
+    Name = "bape-worker-task-role" 
+  }
 }
 
+# POLICY FOR MAIN TASK ROLE: S3 only for presigned URLs and upload –– had only 1 role previously for main and worker, disregarding rule of least privilege > split
+resource "aws_iam_policy" "web_policy" {
+  name = "bape_web_policy"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action   = ["s3:GetObject", "s3:PutObject"]
+      Effect   = "Allow"
+      Resource = "${data.aws_s3_bucket.bape_bucket.arn}/*"
+    }]
+  })
+}
 
-# CUSTOM POLICY FOR WORKER CONTAINER
+# POLICY FOR WORKER: S3 + SQS
 resource "aws_iam_policy" "worker_policy" {
   name = "worker_policy"
-  path = "/"
-
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -73,8 +93,13 @@ resource "aws_iam_policy" "worker_policy" {
   })
 }
 
-# ATTACH CUSTOM POLICY TO TASK ROLE
-resource "aws_iam_role_policy_attachment" "worker_policy_attachment" {
+
+resource "aws_iam_role_policy_attachment" "main_policy_attachment" {
   role       = aws_iam_role.ecs_task_role.name
+  policy_arn = aws_iam_policy.web_policy.arn
+}
+
+resource "aws_iam_role_policy_attachment" "worker_policy_attachment" {
+  role       = aws_iam_role.ecs_worker_task_role.name
   policy_arn = aws_iam_policy.worker_policy.arn
 }
