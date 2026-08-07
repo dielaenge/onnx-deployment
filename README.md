@@ -1,16 +1,18 @@
 # Deploying BAPE (Blind Acoustic Parameter Estimator), an Acoustic ML Model, from Laptop to Real-Time Cloud Service
 
-> An end-to-end AWS deployment portfolio: taking a research PyTorch model and evolving its
-> infrastructure through **seven progressively production-grade stages** — from a local ONNX
-> script to a distributed, real-time inference service on ECS Fargate with an async,
-> queue-driven processing path.
+*An end-to-end AWS deployment portfolio: taking a research PyTorch model and evolving its infrastructure through **seven iterative stages** — from a local ONNX script to a distributed, real-time inference service on ECS Fargate with an async, queue-driven processing path.*
 
+
+---
+> Work in progress (Aug 2026): 
+> - consolidating branches, tagging phase milestones and writing/finishing documentation 
+> - live demo currently offline to save on infra costs; stack is reproducible from Terraform code
+> - finishing demoes and instructions on how to reproduce
 ---
 
 ## Why this project
 
-As a career-changer targeting **AWS Cloud / DevOps Engineering** roles I took the chance to deploy one real workload seven different ways, each stage
-solving the shortcomings of the last. The result is a documented decision trail showing *how* and
+As a career-changer targeting **AWS Cloud / DevOps Engineering** roles I took the chance to deploy one real workload seven different ways, each stage solving the shortcomings of the last. The result is a documented decision trail showing *how* and
 *why* an architecture matures.
 
 Each `phase-N-*/` directory is a **self-contained snapshot** of the architecture at that stage
