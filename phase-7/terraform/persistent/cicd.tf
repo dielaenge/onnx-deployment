@@ -22,8 +22,7 @@ resource "aws_iam_role" "github_actions_role" {
 
         Condition : {
           StringEquals : {
-            # restrict AWS access to pushes only on container-orchestration branch
-            "token.actions.githubusercontent.com:sub" : "repo:dielaenge/onnx-deployment:ref:refs/heads/feat/phase7",
+            "token.actions.githubusercontent.com:sub" : "repo:dielaenge/onnx-deployment:ref:refs/heads/main",
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           }
         }
