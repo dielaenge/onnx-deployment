@@ -2,8 +2,8 @@ name: Build and Deploy - phase 7 (Real time inference and distributed postproces
 
 on:
   push:
-    branches:
-      - feat/phase7
+    branches: [main]
+    paths: ['phase-7/**']
   workflow_dispatch: # Adds a "Run Workflow" button in the GitHub UI!
 
 env:

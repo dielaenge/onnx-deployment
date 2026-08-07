@@ -2,9 +2,9 @@ name: Build and Deploy - phase 5
 
 on:
   push:
-    branches:
-      - feat/container-orchestration
-  workflow_dispatch: # Adds a "Run Workflow" button in the GitHub UI!
+    branches: [main]
+    paths: ['phase-5-container-orchestration/**']
+  workflow_dispatch: # Adds a "Run Workflow" button in the GitHub UI
 
 env:
   AWS_REGION: eu-central-1
