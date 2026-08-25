@@ -88,16 +88,13 @@ ffmpeg*
 arch/
 acoustic_vector.json
 phase-3-proper-infra/src/BAPE_src/results/
-test_audio.*
-create_dummy_model.py
-docs/
-temp/
 phase-3-proper-infra/src/bape/
+phase-3-proper-infra/pro
+phase-3-proper-infra/private
+test_audio.*
+temp/
 aws/
 debug_ssm*.sh
-*.png
-pro
-private
 *.m4a
 *.mp3
 BAPE_src/
@@ -109,3 +106,6 @@ models/
 *.npy
 david_spec.npy
 CLAUDE.md
+**/docs/notes_phase*.md
+**/docs/inference-debugging.md
+**/docs/onnx_export_*.md
