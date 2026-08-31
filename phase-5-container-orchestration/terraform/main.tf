@@ -128,7 +128,7 @@ resource "aws_route_table_association" "prv-sn-b-assoc" {
 # ALB Security Group 
 resource "aws_security_group" "bape_alb_sg" {
   name        = "BAPE ALB SG"
-  description = "Allow all incoming HTTPS traffic to BAPE ALB and forward as HTTP to private subnets."
+  description = "Allow all incoming HTTP traffic to BAPE ALB and forward as HTTP to private subnets."
   vpc_id      = aws_vpc.bape-vpc.id
 
   tags = {
