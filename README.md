@@ -2,10 +2,15 @@
 
 *An end-to-end AWS deployment portfolio: taking a research PyTorch model and evolving its infrastructure through **seven iterative stages** — from a local ONNX script to a distributed, real-time inference service on ECS Fargate with an async, queue-driven processing path.*
 
+<p align="center">
+  <img src="phase-7/docs/hero.png" alt="BAPE live acoustic dashboard" width="820">
+</p>
+
+**[▶️ 30-second demo](phase-7/docs/demo.gif)** — live T60 estimation across 7 octave bands from microphone audio.
 
 ---
-> Work in progress (Aug 2026): 
-> - consolidating branches, tagging phase milestones and writing/finishing documentation 
+> Work in progress (Sep 2026): 
+> - finishing documentation 
 > - live demo currently offline to save on infra costs; stack is reproducible from Terraform code
 > - finishing demoes and instructions on how to reproduce
 ---
