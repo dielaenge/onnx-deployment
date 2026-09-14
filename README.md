@@ -1,4 +1,4 @@
-# Deploying BAPE (Blind Acoustic Parameter Estimator), an Acoustic ML Model, from Laptop to Real-Time Cloud Service
+# Deploying BAPE (Blind Acoustic Parameter Estimator), a spatial-acoustic ML PyTorch model from local protoytpe to a real-time cloud service
 
 *An end-to-end AWS deployment portfolio: taking a research PyTorch model and evolving its infrastructure through **seven iterative stages** — from a local ONNX script to a distributed, real-time inference service on ECS Fargate with an async, queue-driven processing path.*
 
@@ -8,20 +8,14 @@
 
 **[▶️ 30-second demo](phase-7/docs/demo.gif)** — live T60 estimation across 7 octave bands from microphone audio.
 
----
-> Work in progress (Sep 2026): 
-> - finishing documentation 
-> - live demo currently offline to save on infra costs; stack is reproducible from Terraform code
-> - finishing demoes and instructions on how to reproduce
----
+*Live demo offline to keep infra costs at zero — the stack stands up from Terraform on demand (see [Status & roadmap](#status--roadmap)).*
 
 ## Why this project
 
 As a career-changer targeting **AWS Cloud / DevOps Engineering** roles I took the chance to deploy one real workload seven different ways, each stage solving the shortcomings of the last. The result is a documented decision trail showing *how* and
 *why* an architecture matures.
 
-Each `phase-N-*/` directory is a **self-contained snapshot** of the architecture at that stage
-(its own IaC, dependencies, and decision log).
+Each `phase-N-*/` directory is a **self-contained snapshot** of the architecture at that stage (its own IaC, dependencies, and decision log for most stages. Phase 1,2,6,7 are WIP).
 
 ## What it does (Final deployment)
 
@@ -88,7 +82,7 @@ The project evolved over 7 stages to its latest design.
 | **6** | Production real-time | Make model available in real-time | **WebSockets** on ALB/CloudFront, Web Audio API, right-sizing |
 | **7** | Distributed hot/cold path | separate workload of real-time inference and post-processing to separate containers to improve performance  | **SQS**-driven async worker, second Fargate service, S3 events |
 
-Each stage's `docs/` holds a first-person decision log explaining the trade-offs.
+STATUS QUO: Stages 3–5 decision log up to date; phases 6–7 are in progress (see Status & roadmap).
 
 ---
 
@@ -127,8 +121,13 @@ phase-6-production-ready/        # WebSocket real-time inference
 phase-7/                         # distributed hot-path + cold-path (current)
 ```
 
+> **Cloning:** the `bape` submodule is the upstream research/training repo, used only to export
+> the ONNX model. It is **not** needed to read or run any deployed phase — a plain
+> `git clone` (without `--recurse-submodules`) will get all that matters.
+
 Infrastructure for phases 5–7 is defined in each phase's `terraform/` directory; deployment is
 automated via GitHub Actions (`.github/workflows/deploy-phase{5,6,7}.yml`).
+
 
 ---
 
@@ -153,7 +152,7 @@ Terraform + CI/CD**. To keep costs at zero between demos, the cloud stack is **n
 permanently running** — it is stood up from IaC on demand. Phases 1–6 are preserved as
 historical snapshots of the architecture at each stage.
 
-This repo is under active polish toward a portfolio-ready state. Planned next:
+This repo is under active polish. Current and next steps:
 
 - **Per-phase architecture diagrams** (Mermaid, rendered inline) — in progress
 - **Per-phase decision logs** distilled from the development record - in progress
