@@ -1,4 +1,4 @@
-# Deploying BAPE (Blind Acoustic Parameter Estimator), an Acoustic ML Model, from Laptop to Real-Time Cloud Service
+# Deploying BAPE (Blind Acoustic Parameter Estimator), a spatial-acoustic ML PyTorch model from local protoytpe to a real-time cloud service
 
 *An end-to-end AWS deployment portfolio: taking a research PyTorch model and evolving its infrastructure through **seven iterative stages** — from a local ONNX script to a distributed, real-time inference service on ECS Fargate with an async, queue-driven processing path.*
 
