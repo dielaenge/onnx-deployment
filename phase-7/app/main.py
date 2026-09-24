@@ -21,6 +21,7 @@ from contextlib import asynccontextmanager
 import os
 import uuid
 import time
+import math
 
 # Identify Base Directory
 BASE_DIR = Path(__file__).resolve().parent
@@ -202,8 +203,18 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
                 logger.info(json.dumps(log_data))
 
+                # strips non-finite floats, which json.dumps allows but browsers' JSON.parse rejects; before, an uncaught NaN silently killed the whole WS message
+                def _sanitize(obj):
+                    if isinstance(obj, float):
+                        return obj if math.isfinite(obj) else None
+                    if isinstance(obj, list):
+                        return [_sanitize(x) for x in obj]
+                    if isinstance(obj, dict):
+                        return {k: _sanitize(v) for k, v in obj.items()}
+                    return obj
+
                 # send results to client
-                await websocket.send_json(response_json)
+                await websocket.send_json(_sanitize(response_json))
 
                 # slice buffer by 3200 samples (0.2 seconds), remaining 3.8 seconds will be concatenated with new input when available // decreased stride vs phase 6
                 audio_buffer = audio_buffer[-60800:]

@@ -151,6 +151,9 @@ async function uploadAndProcessRecording() {
 
         console.log("Fetching presigned URLs …");
         const response = await fetch(`/api/presigned-urls?session_id=${sessionId}`);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch presigned URLs: ${response.status} ${response.statusText}`);
+        }
         const { session_id, upload_url, upload_object_key, wav_download_url, wav_download_key, spec_download_url, spec_download_key } = await response.json();
         
         console.log("Uploading WAV directly to S3...");
@@ -485,11 +488,16 @@ function drawChart(timelineData, paramKey, divContainerId, yAxisLabel) {
             if (!focusedFrequencyBand) 
                 return;
 
-            // Calculate the nearest mathematical window start (steps of 2)
-            const nearestWindowStart = Math.max(0, Math.round(hoverTime / 2) * 2);
+            // NEAREST-POINT LOOKUP VIA BISECTION
+            // idx is the search result for the target value hoverTime over focusedFrequencyBand.values sorted by time…
+            const idx = bisectTime(focusedFrequencyBand.values, hoverTime);
+            // d0 is the index before idx 
+            const d0 = focusedFrequencyBand.values[idx - 1];
+            // d1 is the index after idx
+            const d1 = focusedFrequencyBand.values[idx];
 
-            // Strictly check if this window exists in the Python data
-            const currentData = focusedFrequencyBand.values.find(v => v.time === nearestWindowStart);
+            const currentData = !d0 ? d1 : !d1 ? d0 // d0 and d1 can be undefined at the edges: hover before the first point > no d0; hover after the last point > no d1
+                : (hoverTime - d0.time > d1.time - hoverTime) ? d1 : d0; //compares hoverTime - d0.time (gap to the earlier point) against d1.time - hoverTime (gap to the later point) and keeps whichever point is closer
 
             // If the data doesn't exist (e.g., ghost window at 2.0s), hide the tooltip and stop.
             if (!currentData) {
@@ -651,8 +659,16 @@ ws.onmessage = function(event) {
     // unhide result area
     resultArea.classList.remove('hidden');
 
+    // peel spectrogram_latest100frames from incomingData for display in JSON result area
+    const { spectrogram_latest100frames, ...rest } = incomingData;
+    const displayData = {
+        ...rest,
+        t60_bapes: { params: rest.t60_bapes.params, quantiles: rest.t60_bapes.quantiles },
+        c50_bapes: { params: rest.c50_bapes.params, quantiles: rest.c50_bapes.quantiles },
+    };
+
     // display JSON in frontend
-    jsonResult.innerText = JSON.stringify(incomingData, null, 2);
+    jsonResult.innerText = JSON.stringify(displayData, null, 2);
 
 
     // as we stream every 200ms / 5 data points per second / at 5Hz, we instruct the D3 frontend to render 300 SVG paths per minute, which might lead to a lag

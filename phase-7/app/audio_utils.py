@@ -50,7 +50,9 @@ class MelSpectrogram:
         spec /= spec.max()
         spec = np.power(spec, self.power) # use np.power() instead of spec.pow() (PyTorch method)
         if self.log_mag:
-            spec = 10 * np.log10(spec + 1e-12)
+            # +1e-12 prevents log's input from being exactly 0 on zero-power bins (which would result in spec=-inf > mean=-inf > std=NaN, so that, downstream, in `main.py`, `standradized_spectrogram` would become NaN)
+            spec = 10 * np.log10(spec + 1e-12) 
+
         if self.trunc is not None:
             nbins, length = spec.shape #use .shape instead of PyTorch .size() method
             if length < self.trunc:
