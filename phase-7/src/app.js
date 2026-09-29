@@ -337,7 +337,6 @@ window.onload = () => {
 // D3 visualisation
 function drawChart(timelineData, paramKey, divContainerId, yAxisLabel) {
     const isT60 = paramKey === "t60_params";
-    const currentLockedId = isT60 ? lockedT60ParamId : lockedC50ParamId;
     const tooltipSelector = `#${paramKey}-tooltip`;
     const tooltip = d3.select(tooltipSelector);
 
@@ -479,7 +478,10 @@ function drawChart(timelineData, paramKey, divContainerId, yAxisLabel) {
         .attr("fill", "none")
         .attr("pointer-events", "all")
         .on("mousemove", function(event) {
-            const activeBandId = currentLockedId !== null ? currentLockedId : 3;
+            // Read the lock state live (not the drawChart-time snapshot) so the tooltip
+            // reflects a legend toggle immediately, even without a chart redraw.
+            const liveLockedId = isT60 ? lockedT60ParamId : lockedC50ParamId;
+            const activeBandId = liveLockedId !== null ? liveLockedId : 3;
             const [mouseX, _] = d3.pointer(event);
             const hoverTime = xScale.invert(mouseX) - 2;
 
