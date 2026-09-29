@@ -135,7 +135,7 @@ The general lesson for me was, again, that a silent preprocessing mismatch does 
 
 ### Decision 9: Export with a static batch size, not dynamic axes
 
-**Context.** With the encoder weights now actually loaded and `load_state_dict` set to `strict=True`, reexporting the model failed with `aten::_transformer_encoder_layer_fwd`. It could not be exported to any opset version which supports dynamic batch sizes. The failure was new only because the earlier, broken export had never loaded the encoder weights.
+**Context.** With the encoder weights now actually loaded and `load_state_dict` set to `strict=True`, reexporting the model failed with `aten::_transformer_encoder_layer_fwd`. It could not be exported to any opset version which supports dynamic batch sizes. The failure was new only because the earlier, broken export had never loaded the encoder weights properly and failed silently.
 
 **Decision.** Export with a static input shape of `[1, 1, 16, 2000]` (1 recording/batch, 1 channel, 16 mel bins/height, 2000 time frames / width), one spectrogram per inference call, and loop over batched spectrograms in `inference_engine.py`.
 

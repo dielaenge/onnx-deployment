@@ -12,7 +12,7 @@ Diagrams live in the phase's `README.md`. This phase took *a lot* of manual reso
 
 ## Part A — Productionizing the real model
 
-### Decision 1 · Reverse-engineering the model instead of deploying the training repo.
+### Decision 1: Reverse-engineering the model instead of deploying the training repo.
 
 **Context.** I was given access to the BAPE research repository and a `.pth` weights file. The repo is a
 large, unfamiliar PyTorch training codebase driven by Hydra configs. It was built for training and
@@ -28,7 +28,7 @@ spectrogram (`n_mels=16`, `trunc=2000`). Exporting the ONNX file decouples the d
 cost was a genuine "code archaeology" effort (tracing configs, matching tensor shapes, key-renaming
 the state dict) — documented separately as its own investigation `MLOps_code-archealogy.md` (linked artifact coming).
 
-### Decision 2 · How to feed the model and how to convey the results
+### Decision 2: How to feed the model and how to convey the results
 
 **Context.** The model only produces correct results if the audio is transformed identically to how
 it was during training (4 seconds, 16kHz mono, WAV), and it emits multiple output tensors rather than a single vector.
@@ -45,7 +45,7 @@ more self-documenting object stating inference metadata, estimated parameters (T
 
 ## Part B — Cloud architecture
 
-### Decision 3 · Custom VPC with `/24` subnets over a `10.16.0.0/16` range
+### Decision 3: Custom VPC with `/24` subnets over a `10.16.0.0/16` range
 
 **Context.** Phase 2's instance sat on AWS' default networking. A production-grade deployment deserves a designed, isolated
 network and as the developer I wanted to experience the workings of a custom-VPC first-hand.
@@ -60,7 +60,7 @@ half the VPC — leaving no room to grow. `/24` ranges keep the plan extensible,
 **Consequences.** A clean, room-to-grow VPC plan, which avoids VPC collisions and that carried forward as the template for later
 phases.
 
-### Decision 4 · How to keep the EC2 instance private and safe and still deliver results
+### Decision 4: How to keep the EC2 instance private and safe and still deliver results
 
 **Context.** In Phase 2 the application server was directly internet-facing and thus publicly available.
 
@@ -75,7 +75,7 @@ private instance reach out without being reachable inbound.
 **Consequences.** A conventional public-frontend / private-compute topology — and the first appearance
 of the NAT Gateway which became a main cost driver I needed to engineer away.
 
-### Decision 5 · Accept a two-AZ ALB with a single instance — a deliberate learning compromise
+### Decision 5: Accept a two-AZ ALB with a single instance — a deliberate learning compromise
 
 **Context.** For development purposes, I wanted a minimal resource footprint, and tried to proceed with a single public subnet but an ALB requires **at least two Availability Zones** enabled. That forced me to create a second public subnet and a second ALB node even though I was still planning to deploy only one backend target — a setup that "doesn't make sense", because the reason for load balancing is to distribute load on multiple backends.
 
@@ -87,7 +87,7 @@ of the NAT Gateway which became a main cost driver I needed to engineer away.
 
 It also produced a concrete gotcha worth recording: **an ALB only routes to targets in the Availability Zones it has enabled.** The instance had to be launched into a private subnet whose AZ the load balancer actually covered — placing compute in "a private subnet" was not sufficient, it had to be *the right one*. It's obvious in hindsight but was invisible until traffic failed to reach a healthy-looking instance.
 
-### Decision 6 · Zero-trust access: SSM instead of SSH, TLS terminated at the ALB
+### Decision 6: Zero-trust access: SSM instead of SSH, TLS terminated at the ALB
 
 **Context.** The Phase 2 box was administered over SSH with an open port 22.
 
@@ -99,7 +99,7 @@ without exposing a port, and terminating TLS at the load balancer centralizes ce
 
 **Consequences.** A materially smaller attack surface and a cleaner security story than Phase 2. TLS ends at the ALB and the hop from ALB to instance travels unencrypted within the VPC, which is a trade-off.
 
-### Decision 7 · The microphone / HTTPS secure-context wall
+### Decision 7: The microphone / HTTPS secure-context wall
 
 **Context.** The main point of the BAPE app is to process microphone input, and modern browsers only grant
 `getUserMedia` in a **secure context**, meaning valid HTTPS which requires a valid TLS/SSL certificate. So I generated a self-signed cert and imported it to AWS Certificates Manager (ACM).
@@ -110,7 +110,7 @@ without exposing a port, and terminating TLS at the load balancer centralizes ce
 
 **Consequences.** A concrete, documented limitation and a clear prerequisite (real domain + trusted cert or CloudFront distribution) carried into later phases and is what made a CloudFront Distribution, which fronts a trusted certificate, necessary.
 
-### Decision 8 · Deploying via the AWS CLI or as IaC
+### Decision 8: Deploying via the AWS CLI or as IaC
 
 **Context.** Everything built via a cloud provider could have been written in Terraform from the start.
 
