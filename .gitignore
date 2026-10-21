@@ -99,7 +99,6 @@ debug_ssm*.sh
 *.mp3
 BAPE_src/
 *.mov
-*.in
 archive/
 assets/
 models/
