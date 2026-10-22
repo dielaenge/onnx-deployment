@@ -1,20 +1,24 @@
+# Fetch app data bucket
 data "aws_s3_bucket" "bape_bucket" {
     bucket = "bape-app-data-phase7-davidg"
 }
 
+# Fetch frontend bucket
 data "aws_s3_bucket" "bape_frontend_bucket" {
     bucket = "bape-phase7-frontend-davidg"
 }
 
-# Dynamically fetch your persistent ECR Repository [4]
+# Fetch ECR repo
 data "aws_ecr_repository" "bape_ecr" {
   name = "bape-ecr-phase7"
 }
 
-# Dynamically fetch your persistent SQS Queue [4]
+# Fetch SQS queue
 data "aws_sqs_queue" "bape_queue" {
   name = "bape-cold-path-queue"
 }
+
+# Fetch available AZs
 data "aws_availability_zones" "available" {
   state = "available"
 }
