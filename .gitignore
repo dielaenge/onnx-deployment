@@ -88,7 +88,6 @@ ffmpeg*
 arch/
 acoustic_vector.json
 phase-3-proper-infra/src/BAPE_src/results/
-phase-3-proper-infra/src/bape/
 phase-3-proper-infra/pro
 phase-3-proper-infra/private
 test_audio.*
@@ -108,3 +107,6 @@ CLAUDE.md
 **/docs/notes_phase*.md
 **/docs/inference-debugging.md
 **/docs/onnx_export_*.md
+# Local clones of the BAPE research repo, needed only by the ONNX exporter
+phase-7/bape/
+phase-3-proper-infra/src/bape/
