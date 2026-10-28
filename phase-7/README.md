@@ -1,24 +1,28 @@
 # Phase 7 — Distributed Hot-Path / Cold-Path Inference
 
-> Real-time streaming inference decoupled from heavy asynchronous processing, so one workload can never starve the other.
+> Real-time streaming inference decoupled from asynchronous post-processing initiated via queue.
 
-The current, active phase. It splits the single real-time service from [Phase 6](../phase-6-production-ready) into two independently-scaled workloads on **ECS Fargate**:
+Phase 7 splits the single real-time service from [Phase 6](../phase-6-production-ready) into two independently-scaled workloads on **ECS Fargate**:
 
-- a **hot path** — latency-sensitive, real-time inference streamed over WebSockets, and
-- a **cold path** — latency-insensitive, full-recording processing driven asynchronously through SQS.
+- a **hot path** — *"get live results"*; latency-sensitive, real-time inference streamed over WebSockets, and
+- a **cold path** — *"review the entire session"*; latency-insensitive, full-recording processing driven asynchronously through SQS.
 
-The design goal: a CPU spike from processing a full recording must never introduce latency or drop a live connection. So the two paths run as separate Fargate services from the same image, and communicate only through S3 and a queue.
+The design goal: 
+Establishing a real-time inference service was a valuable increment but, in the interest of research users, both live results and analysis of (past) recording sessions must be made available.
+This is foundational to separating pipelines: post-processing a full recording must never introduce latency to or drop a live connection. 
+
+Thus, live-inference and post-processing run on two separate paths as separate Fargate services from the same image. They communicate via S3 event notifications which occur when a recording ends, presigned URLS are generated and land in the SQS queue from where the worker process takes over.
 
 ## Architecture
 
 ```mermaid
 flowchart TB
     subgraph Browser
-        MIC[Mic → AudioWorklet<br/>processor.js]
+        MIC[Mic → `RealTimeAudioProcessor`<br/>`src/processor.js`]
         VIZ[D3 charts + spectrogram canvas]
     end
 
-    CF[CloudFront<br/>static frontend from S3 / OAC]
+    CF[CloudFront<br/>static HTML/CSS/JS frontend from S3 / OAC]
 
     subgraph HOT["Hot path — bape_ecs_service (Fargate, behind ALB)"]
         WS["WS /ws — FastAPI"]
@@ -48,7 +52,17 @@ flowchart TB
 
 ## Hot path
 
-Browser mic audio is captured by an `AudioWorklet` ([`src/processor.js`](src/processor.js)), buffered into 200 ms / 3200-sample chunks, and streamed as raw binary `Float32Array` over the WebSocket. The server ([`app/main.py`](app/main.py) `WS /ws`) keeps a rolling **4 s (64000-sample) window**, computes a `MelSpectrogram` once per chunk (T60 and C50 share identical inputs), and runs both ONNX models **concurrently** (`asyncio.to_thread` + `asyncio.gather`) to stay under the 200 ms stride budget. It streams back JSON (params / quantiles / latents for both models, the newest spectrogram frames, and `inference_time_ms`). Measured inference is ~30–60 ms per stride after warmup.
+Browser mic audio is 
+- captured by `RealTimeAudioProcessor`, an extension of ([`AudioWorkletProcessor`](https://github.com/dielaenge/onnx-deployment/blob/106f0a5ab71e4ff428a1a68442eb474918217c61/phase-7/src/processor.js#L2)), 
+- buffered into 200 ms / 3200-sample chunks, and 
+- streamed as raw binary `Float32Array` over the WebSocket. 
+
+The server ([`app/main.py`](app/main.py) `WS /ws`) 
+- keeps a rolling **4 s (64000-sample) [`audio_buffer` and runs an inference loop](https://github.com/dielaenge/onnx-deployment/blob/106f0a5ab71e4ff428a1a68442eb474918217c61/phase-7/app/main.py#L123-L167)**, 
+  - deletes the oldest 200ms/3200 sample-chunks and adds new, incoming chunks,
+- processes a new 4 second spectrogram every 200ms (), and 
+- [runs both ONNX models **concurrently**](https://github.com/dielaenge/onnx-deployment/blob/106f0a5ab71e4ff428a1a68442eb474918217c61/phase-7/app/main.py#L169-L176) 
+- streams back response_json (params / quantiles / latents for both models, the newest spectrogram `spectrogram_latest100frames`, and `inference_time_ms`). Measured inference is ~30–60 ms per stride after warmup.
 
 ## Cold path
 
@@ -56,30 +70,67 @@ On mic stop, the browser encodes the full recording to WAV client-side, fetches 
 
 ## Key engineering decisions
 
-- **Separate ONNX models for T60 and C50**, run concurrently rather than as one sequential monolith — each estimator can be re-exported or re-weighted independently.
-- **Training / inference dependency split** — the production image ships only `onnxruntime` + `fastapi` (~150 MB); PyTorch, Hydra and the training codebase live in a dev-only pipeline and never enter the container.
-- **Split Terraform state** — [`terraform/persistent/`](terraform/persistent) (S3, ECR, SQS, IAM, CI/CD OIDC) and [`terraform/compute/`](terraform/compute) (VPC, ECS, ALB, CloudFront) are independent root modules, so the cost-driving compute layer can be destroyed and re-applied without touching persistent state.
-- **No NAT Gateway** — private subnets reach AWS services through VPC interface/gateway endpoints (S3, ECR, CloudWatch Logs, SQS) to avoid NAT cost.
-- **Privacy by design** — a 1-day S3 lifecycle expiry and in-RAM processing; deliberate minimum data retention.
-- **Numerical-parity CI discipline** — the ONNX exporter self-tests against reference PyTorch outputs (`.pth`) before export.
+- **Separate ONNX models for T60 and C50**, run concurrently; each estimator can be re-exported or re-weighted independently via [`conf/exporter.yaml`](https://github.com/dielaenge/onnx-deployment/blob/106f0a5ab71e4ff428a1a68442eb474918217c61/phase-7/conf/exporter.yaml).
+- **Training / inference dependency split** — the phase 7 image ships `onnxruntime` + `fastapi` (~150 MB), while dependency groups required for the ONNX export are opt-in via the `uv` flag `--group onnx_export`; `uv sync` does not install the export packages and the Dockerfile does not require them.
+- **Split Terraform state** — To speed up deployment without increasing costs the terraform code base was split into two separate layers:
+  - [`terraform/persistent/`](terraform/persistent) (S3, ECR, SQS, IAM, CI/CD OIDC) and 
+  - [`terraform/compute/`](terraform/compute) (VPC, ECS, ALB, CloudFront)
+  
+`/compute`, the cost-driving layer, can be destroyed and re-applied without touching `/persistent` state.
+- **No NAT Gateway** — private subnets reach AWS services through VPC interface/gateway endpoints (S3, ECR, CloudWatch Logs, SQS), whcih avoids NAT costs but introduces endpoint costs.
+- **Privacy by design** — voice recordings and spatial information of users are sensitive data, which the project does not want to manage. Therefor all data written to S3 has a 1-day lifecycle expiry and is only ever processed in RAM writing nothing to storage; this is a deliberate decision for minimum data retention.
+- **Numerical-parity CI discipline** — the [ONNX exporter self-tests](https://github.com/dielaenge/onnx-deployment/blob/106f0a5ab71e4ff428a1a68442eb474918217c61/phase-7/scripts/param_estimator-onnx_exporter.py#L146-L182) against [reference PyTorch outputs (`cfg_output_tuple`)](https://github.com/dielaenge/onnx-deployment/blob/106f0a5ab71e4ff428a1a68442eb474918217c61/phase-7/scripts/param_estimator-onnx_exporter.py#L126-L135) before export.
 
 ## Known open issue
 
 The hot and cold paths compute spectrograms via genuinely different code paths (`processor.js` + numpy vs. FFmpeg + `MelSpectrogram`), which introduces measurable numeric drift. Refactoring the worker to replicate the hot path's 4-second sliding local standardization reduced feature drift from an MSE of ~1.5 to **~0.015**. [`scripts/compare_pipelines.py`](scripts/compare_pipelines.py) and the `spec_hot_*` / `spec_cold_*` dumps exist to keep quantifying it.
 
+---
+
 ## Run locally
 
+***Requirements:*** 
+* [uv](https://docs.astral.sh/uv/) for virtual environment and installing dependencies.
+* [`direnv`](https://direnv.net) to automatically load environment variables (not required when running locally).
+
+1. **Create .venv and launch the main container**
 ```bash
 cd phase-7
-python -m app.main          # uvicorn; host/port from UVICORN_HOST/UVICORN_PORT (default 127.0.0.1:8000)
-python -m app.worker        # cold-path worker (separate process; long-polls SQS)
+uv sync                     # runtime dependencies only, see pyproject.toml
+uv run python -m app.main   
+```
+The run command resolves `UVICORN_HOST/UVICORN_PORT` env variables from the [ECS task](https://github.com/dielaenge/onnx-deployment/blob/106f0a5ab71e4ff428a1a68442eb474918217c61/phase-7/terraform/compute/ecs.tf#L43-L50), or, if run locally, defaults them to `127.0.0.1:8000`
+
+Run locally, the frontend must be served from a local `src/` directory.
+In production, running in the cloud, CloudFront serves the frontend from S3.
+
+2. **Connect cold-path pipeline**
+The cold-path worker runs as a separate process on ECS and requires AWS credentials as well as the adjacent SQS queue and S3 app data bucket
+To use your AWS credentials, copy this to `.envrc` and fill it in: 
+
+```phase-7/.envrc
+export AWS_PROFILE=<your-aws-profile>
+export ACCOUNT_ID=<your-account-id>
+export AWS_REGION=eu-central-1
+
+# in `phase-7/terraform/persistent`, run `terraform apply` 
+# produces outputs for SQS_QUEUE_URL and APP_DATA_BUCKET_NAME
+export SQS_QUEUE_URL=https://sqs.<region>.amazonaws.com/<account-id>/<queue-name>
+export APP_DATA_BUCKET_NAME=<your-bucket-name>
+
+# ONLY required if you want to run the ONNX export from `scripts/param_estimator-onnx_exporter.py` 
+# see scripts/README.md
+path_add PYTHONPATH "$PWD/bape"
 ```
 
-ONNX export (Hydra-driven; runs a parity self-test before exporting):
-
+3. Start the cold-path worker.
 ```bash
-python scripts/param_estimator-onnx_exporter.py
+uv run python -m app.worker
 ```
+
+### Exporting the ONNX model
+The model export pipeline is **not** part of `uv sync`, but can also be reproduced, see [`scripts/README.md`](scripts/README.md).
+
 
 ## Layout
 
@@ -87,8 +138,11 @@ python scripts/param_estimator-onnx_exporter.py
 phase-7/
 ├── app/            FastAPI hot path (main.py), cold-path worker (worker.py), inference_engine.py
 ├── src/            Frontend — index.html, app.js, processor.js (AudioWorklet)
-├── scripts/        ONNX exporter, compare_pipelines.py, bape_local (submodule)
+├── scripts/        ONNX exporter, compare_pipelines.py — see scripts/README.md
 ├── conf/           Hydra config for the exporter
 ├── terraform/      persistent/ + compute/ (two independent root modules)
-└── Dockerfile      Single image; hot and cold services differ only by task command
+├── Dockerfile      Single image; hot and cold services differ only by task command
+└── pyproject.toml  Dependencies and dependency groups; uv.lock pins exact versions
 ```
+
+
