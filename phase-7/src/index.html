@@ -77,7 +77,10 @@
                 </div>
 
                 <div class="lg:col-span-2 bg-slate-900/50 p-4 rounded-xl border border-slate-800">
-                    <h3 class="text-xs font-bold uppercase text-slate-500 mb-2">Live Spectrogram (Last 200ms)</h3>
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-xs font-bold uppercase text-slate-500">Live Spectrogram (Last 200ms)</h3>
+                        <span id="latency-badge" class="text-[10px] font-mono text-slate-500">— ms / inference</span>
+                    </div>
                     <canvas id="spectrogram-canvas" width="800" height="160" class="w-full h-32 bg-black rounded-lg"></canvas>
                 </div>
                     
