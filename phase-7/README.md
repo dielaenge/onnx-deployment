@@ -66,24 +66,53 @@ The server ([`app/main.py`](app/main.py) `WS /ws`)
 
 ## Cold path
 
-On mic stop, the browser encodes the full recording to WAV client-side, fetches presigned URLs from `GET /api/presigned-urls`, and `PUT`s the WAV directly to S3 (`uploads/` prefix) — bypassing the API server entirely. An S3 `ObjectCreated` notification (filtered to `uploads/` to avoid a processing loop) enqueues to SQS. The worker ([`app/worker.py`](app/worker.py)) long-polls the queue, downloads the WAV, normalizes it with FFmpeg, regenerates a full-resolution spectrogram, uploads results to `processed/` / `spectrograms/`, and only then deletes the SQS message. The browser polls the presigned download URL (exponential backoff) until the results are ready.
+On mic stop, the browser encodes the full recording to WAV client-side, fetches presigned URLs from `GET /api/presigned-urls`, and `PUT`s the WAV directly to S3 (`uploads/` prefix) bypassing the compute infrastructure entirely. An S3 `ObjectCreated` notification (filtered to `uploads/`) enqueues to SQS. 
+The worker ([`app/worker.py`](app/worker.py)) 
+- long-polls the queue, 
+- downloads the WAV, 
+- normalizes it with FFmpeg, 
+- regenerates a full-resolution spectrogram, 
+- uploads results to `processed/` / `spectrograms/`, and only then 
+- deletes the SQS message. 
+
+The browser polls the presigned download URL (exponential backoff) until the results are ready.
 
 ## Key engineering decisions
 
 - **Separate ONNX models for T60 and C50**, run concurrently; each estimator can be re-exported or re-weighted independently via [`conf/exporter.yaml`](https://github.com/dielaenge/onnx-deployment/blob/106f0a5ab71e4ff428a1a68442eb474918217c61/phase-7/conf/exporter.yaml).
-- **Training / inference dependency split** — the phase 7 image ships `onnxruntime` + `fastapi` (~150 MB), while dependency groups required for the ONNX export are opt-in via the `uv` flag `--group onnx_export`; `uv sync` does not install the export packages and the Dockerfile does not require them.
+- **Training / inference dependency split** — the phase 7 image ships `onnxruntime` + `fastapi` (~150 MB), while dependency groups required for the ONNX export are opt-in via the `uv` flag `--group onnx_export`; `uv sync` does not install the `onnx_export` packages and the Dockerfile does not require them.
 - **Split Terraform state** — To speed up deployment without increasing costs the terraform code base was split into two separate layers:
   - [`terraform/persistent/`](terraform/persistent) (S3, ECR, SQS, IAM, CI/CD OIDC) and 
   - [`terraform/compute/`](terraform/compute) (VPC, ECS, ALB, CloudFront)
   
 `/compute`, the cost-driving layer, can be destroyed and re-applied without touching `/persistent` state.
-- **No NAT Gateway** — private subnets reach AWS services through VPC interface/gateway endpoints (S3, ECR, CloudWatch Logs, SQS), whcih avoids NAT costs but introduces endpoint costs.
-- **Privacy by design** — voice recordings and spatial information of users are sensitive data, which the project does not want to manage. Therefor all data written to S3 has a 1-day lifecycle expiry and is only ever processed in RAM writing nothing to storage; this is a deliberate decision for minimum data retention.
-- **Numerical-parity CI discipline** — the [ONNX exporter self-tests](https://github.com/dielaenge/onnx-deployment/blob/106f0a5ab71e4ff428a1a68442eb474918217c61/phase-7/scripts/param_estimator-onnx_exporter.py#L146-L182) against [reference PyTorch outputs (`cfg_output_tuple`)](https://github.com/dielaenge/onnx-deployment/blob/106f0a5ab71e4ff428a1a68442eb474918217c61/phase-7/scripts/param_estimator-onnx_exporter.py#L126-L135) before export.
+- **No NAT Gateway** — private subnets reach AWS services through VPC interface/gateway endpoints (S3, ECR, CloudWatch Logs, SQS), which avoid NAT Gateway costs but introduces endpoint costs.
+- **Privacy by design** — voice recordings and their spatial information are sensitive data, which the project does not want to manage. Therefor all data written to S3 has a 1-day lifecycle expiry and is only ever processed in RAM writing nothing to storage; this is a deliberate decision for minimum data retention.
+- **Numerical-parity CI testing** — the [ONNX exporter self-tests](https://github.com/dielaenge/onnx-deployment/blob/106f0a5ab71e4ff428a1a68442eb474918217c61/phase-7/scripts/param_estimator-onnx_exporter.py#L146-L182) against [reference PyTorch outputs (`cfg_output_tuple`)](https://github.com/dielaenge/onnx-deployment/blob/106f0a5ab71e4ff428a1a68442eb474918217c61/phase-7/scripts/param_estimator-onnx_exporter.py#L126-L135) before export.
 
-## Known open issue
 
-The hot and cold paths compute spectrograms via genuinely different code paths (`processor.js` + numpy vs. FFmpeg + `MelSpectrogram`), which introduces measurable numeric drift. Refactoring the worker to replicate the hot path's 4-second sliding local standardization reduced feature drift from an MSE of ~1.5 to **~0.015**. [`scripts/compare_pipelines.py`](scripts/compare_pipelines.py) and the `spec_hot_*` / `spec_cold_*` dumps exist to keep quantifying it.
+## Known open issue — hot/cold drift
+
+The two paths compute the same mel spectrogram through two different implementations: 
+The real-time hot path has to work incrementally on a live stream and computes computing one spectrogram every 200 ms.
+The cold path starts on a full recording, has no special latency requirements, can normalize it with FFmpeg and process it in full-resolution slices. 
+Batch post-record and live-stream processing therefor require different approaches. 
+
+Both paths apply the same 4-second sliding local standardization, which was lacking before commit `764e2d4`.
+This surfaced when comparing the pipelines because of the beforementioned implementation differences. 
+After aligning the standardization in both processes, a Mean Squared Error (MSE) of ~1.5 could be brought down to **0.018**. 
+Remaining untested candidates: chunked vs. whole-signal STFT boundaries, and FFmpeg's amplitude normalization.
+
+How much more the two implementations could be aligned is an open question and running the chunked algorithm over the full file on the cold path is planned for a future increment.
+
+Enabling (`1`, `true`, `yes`) the `DEBUG_SPEC_DUMP` env variable will write numpy dumps to `app/models` when the hot or cold path run.
+The resulting dumps will share session UUIDs (`models/spec_cold_<session_id>.npy` and `models/spec_hot_<session_id>.npy`).
+
+You can review the drift running:
+
+```bash
+uv run python scripts/compare_pipelines.py <fill-in-session-uuid>
+```
 
 ---
 
@@ -91,46 +120,52 @@ The hot and cold paths compute spectrograms via genuinely different code paths (
 
 ***Requirements:*** 
 * [uv](https://docs.astral.sh/uv/) for virtual environment and installing dependencies.
-* [`direnv`](https://direnv.net) to automatically load environment variables (not required when running locally).
+* [`direnv`](https://direnv.net) to automatically load environment variables (SQS queue URL, presigned URLs, app data bucket) via `.envrc`.
 
-1. **Create .venv and launch the main container**
+1. **Create .venv and launch the main process**
 ```bash
 cd phase-7
-uv sync                     # runtime dependencies only, see pyproject.toml
+uv sync                     # no onnx_export dependencies, see pyproject.toml
 uv run python -m app.main   
 ```
 The run command resolves `UVICORN_HOST/UVICORN_PORT` env variables from the [ECS task](https://github.com/dielaenge/onnx-deployment/blob/106f0a5ab71e4ff428a1a68442eb474918217c61/phase-7/terraform/compute/ecs.tf#L43-L50), or, if run locally, defaults them to `127.0.0.1:8000`
 
-Run locally, the frontend must be served from a local `src/` directory.
-In production, running in the cloud, CloudFront serves the frontend from S3.
+Running locally, the frontend is served from the cloned `src/` directory, while the models are loaded from [`app/models`](app/models/).
+In production, running in the cloud, CloudFront serves the frontend from S3, while the onnx model is baked into the image (which is subject to change).
 
 2. **Connect cold-path pipeline**
-The cold-path worker runs as a separate process on ECS and requires AWS credentials as well as the adjacent SQS queue and S3 app data bucket
-To use your AWS credentials, copy this to `.envrc` and fill it in: 
+The cold-path worker runs as a separate process on ECS and ***requires*** AWS credentials, the SQS queue and S3 app data bucket (which Terraform will provide after applying, see code below).
 
-```phase-7/.envrc
-export AWS_PROFILE=<your-aws-profile>
-export ACCOUNT_ID=<your-account-id>
-export AWS_REGION=eu-central-1
+To use your AWS credentials: 
 
-# in `phase-7/terraform/persistent`, run `terraform apply` 
-# produces outputs for SQS_QUEUE_URL and APP_DATA_BUCKET_NAME
-export SQS_QUEUE_URL=https://sqs.<region>.amazonaws.com/<account-id>/<queue-name>
-export APP_DATA_BUCKET_NAME=<your-bucket-name>
+- fill your credentials in [`.envrc.example`](.envrc.example)
+- save it to `phase-7/.envrc` and 
+- ***!!add `.envrc` to .gitignore!!*** 
+- fill in 
 
-# ONLY required if you want to run the ONNX export from `scripts/param_estimator-onnx_exporter.py` 
-# see scripts/README.md
-path_add PYTHONPATH "$PWD/bape"
-```
 
 3. Start the cold-path worker.
 ```bash
 uv run python -m app.worker
 ```
+### Running the deployed artifact instead
+
+The command above runs the app as a local process, which is best to iterate on. It also serves the frontend. 
+
+To run exactly what runs on ECS Fargate:
+
+```bash
+docker build -t bape-local .
+docker run --rm -p 8080:8080 bape-local
+curl localhost:8080/health
+```
+
+The container has no frontend. 
+In production it is served via a CloudFront distribiution (CDN) which sources it from S3. 
+Running the image will give you the API and `/health`.
 
 ### Exporting the ONNX model
 The model export pipeline is **not** part of `uv sync`, but can also be reproduced, see [`scripts/README.md`](scripts/README.md).
-
 
 ## Layout
 
@@ -144,5 +179,3 @@ phase-7/
 ├── Dockerfile      Single image; hot and cold services differ only by task command
 └── pyproject.toml  Dependencies and dependency groups; uv.lock pins exact versions
 ```
-
-

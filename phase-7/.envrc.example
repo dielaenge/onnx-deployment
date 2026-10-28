@@ -3,8 +3,7 @@
 # Copy to phase-7/.envrc (which must be gitignored) and fill in your data. 
 
 # Requires direnv: https://direnv.net for cloud deployment.
-# Not needed to run the app locally via `uv run`, only for the AWS elements (cold-path, SQS queue, presigned URLs)
-# (cold-path worker, presigned URLs).
+# `app.main` can run locally but `app.worker` will need AWS access for presigned URLs and SQS queue.
 
 export AWS_PROFILE=<your-aws-profile>
 export ACCOUNT_ID=<your-account-id>

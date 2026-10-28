@@ -101,6 +101,9 @@ BAPE_src/
 archive/
 assets/
 models/
+# Phase 7 ships its own exported models so the service runs from a fresh clone
+!phase-7/app/models/*.onnx
+!phase-7/app/models/*.onnx.data
 *.npy
 david_spec.npy
 CLAUDE.md

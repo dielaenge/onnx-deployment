@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "This repository deploys the BAPE model. If you use it, please cite the underlying paper."
+title: "BAPE deployment — from local ONNX prototype to real-time cloud inference"
+authors:
+  - family-names: Goossens
+    given-names: David
+repository-code: "https://github.com/dielaenge/onnx-deployment"
+references:
+  - type: article
+    title: "Multi-stage representation learning for blind room-acoustic parameter estimation with uncertainty quantification"
+    authors:
+      - family-names: Götz
+        given-names: Philipp
+      - family-names: Tuna
+        given-names: Cagdas
+      - family-names: Brendel
+        given-names: Andreas
+      - family-names: Walther
+        given-names: Andreas
+      - family-names: Habets
+        given-names: "Emanuël A. P."
+    journal: "The Journal of the Acoustical Society of America"
+    volume: 159
+    issue: 1
+    start: 247
+    end: 259
+    year: 2026
+    doi: "10.1121/10.0042193"
