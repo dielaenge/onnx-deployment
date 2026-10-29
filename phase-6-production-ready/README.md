@@ -7,6 +7,14 @@
 
 Replaces REST request/response with a stateful, low-latency **WebSocket** connection: raw microphone floats stream from the browser's Web Audio API straight into the model; live inference results are visualised. Deployed behind an ALB and CloudFront CDN, with structured JSON logging for MLOps observability.
 
-**Stack:** WebSockets –  · D3.js · ECS Fargate · ALB · CloudFront - Web Audio API
+**Stack:** 
+- WebSockets 
+- ECS Fargate 
+- ALB 
+- CloudFront 
+- Web Audio API
+- D3.js 
+
+**Model:** `app/models/bape_2026-04-13_15-13-22.onnx`. Same file as phase 5. T60 only, output not yet validated.
 
 → Next: [Phase 7](../phase-7) splits this into decoupled hot and cold paths.
