@@ -104,7 +104,8 @@ models/
 # Phase 7 ships its own exported models so the service runs from a fresh clone
 !phase-7/app/models/*.onnx
 !phase-7/app/models/*.onnx.data
-*.npy
+# ship numpy dump examples
+!phase-7/app/models/npy-dumps/*_example.npy
 david_spec.npy
 CLAUDE.md
 **/docs/notes_phase*.md
