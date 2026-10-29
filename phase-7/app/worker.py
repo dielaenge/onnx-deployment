@@ -117,6 +117,8 @@ def generate_spectrogram(processed_audio_path:str, full_spectrogram_path:str):
         with open(full_spectrogram_path, 'w') as f:
             json.dump(spec_payload, f)
 
+        return locally_standardized_data
+
 
 # Upload wav and spectrogram to S3
 def upload_assets(bucket:str, processed_audio_path:str, processed_audio_key:str, full_spectrogram_path:str, spectrogram_key:str):
@@ -201,19 +203,31 @@ def main():
                     )
 
                     # DOWNLOAD
-                    download_raw_audio(app_data_bucket, object_key, raw_audio_path)
+                    download_raw_audio(
+                        app_data_bucket, 
+                        object_key, 
+                        raw_audio_path
+                    )
                     
                     # Normalize
-                    normalize_raw_audio(raw_audio_path, processed_audio_path)
+                    normalize_raw_audio(
+                        raw_audio_path, 
+                        processed_audio_path
+                    )
 
                     # Generate spectrogram
-                    generate_spectrogram(processed_audio_path=processed_audio_path, full_spectrogram_path=full_spectrogram_path)
+
+                    spec_array = generate_spectrogram(
+                        processed_audio_path=processed_audio_path, 
+                        full_spectrogram_path=full_spectrogram_path
+                    )
 
                     # Save a copy of the spectrogram to models/ folder before any uploads or cleanups
                     if DEBUG_SPEC_DUMP:
-                        shutil.copy(full_spectrogram_path, BASE_DIR / "models" / f"spec_cold_{base_name}.npy")
-                        logger.info("Saved a local copy of cold-path spectrogram for parity verification under %s/models/spec_cold_%s.npy", BASE_DIR, base_name)
-
+                        np.save(BASE_DIR / "models" / "npy-dumps" / f"spec_cold_{base_name}.npy", spec_array)
+                        shutil.copy(full_spectrogram_path, BASE_DIR / "models" / "npy-dumps" / f"spec_cold_{base_name}.json")
+                        logger.info("Saved cold-path spectrogram dumps (.npy + .json) for session %s", base_name)
+ 
                     # UPLOAD ASSETS     
                     upload_assets(
                         bucket=app_data_bucket, 

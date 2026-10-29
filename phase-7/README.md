@@ -105,15 +105,26 @@ Remaining untested candidates: chunked vs. whole-signal STFT boundaries, and FFm
 
 How much more the two implementations could be aligned is an open question and running the chunked algorithm over the full file on the cold path is planned for a future increment.
 
-Enabling (`1`, `true`, `yes`) the `DEBUG_SPEC_DUMP` env variable will write numpy dumps to `app/models` when the hot or cold path run.
-The resulting dumps will share session UUIDs (`models/spec_cold_<session_id>.npy` and `models/spec_hot_<session_id>.npy`).
+Enabling (`1`, `true`, `yes`) the `DEBUG_SPEC_DUMP` env variable will write numpy dumps to `app/models/npy-dumps/` when the hot or cold path run:
 
-You can review the drift running:
+```bash
+# hot-path
+DEBUG_SPEC_DUMP=1 uv run python -m app.main # writes `models/npy-dumps/spec_cold_<session_id>.npy`
 
+# cold-path
+DEBUG_SPEC_DUMP=1 uv run python -m app.worker # writes `models/npy-dumps/spec_hot_<session_id>.npy`).
+```
+Related sessions will share session UUIDs.
+
+You can then compare hot vs cold path results:
 ```bash
 uv run python scripts/compare_pipelines.py <fill-in-session-uuid>
 ```
 
+Or run the test with provided examples: 
+```bash
+uv run python scripts/compare_pipelines.py example
+```
 ---
 
 ## Run locally
