@@ -108,6 +108,7 @@ models/
 !phase-7/app/models/npy-dumps/*_example.npy
 david_spec.npy
 CLAUDE.md
+.claude/
 **/docs/notes_phase*.md
 **/docs/inference-debugging.md
 **/docs/onnx_export_*.md
