@@ -101,14 +101,19 @@ Copy [`phase-7/.envrc.example`](phase-7/.envrc.example) to `.envrc` and fill it 
 The project evolved over separated stages to its latest design.
 
 | # | Stage | Problem it solves | Key (AWS) skills | Status |
-|---|---|---|---|
-| **1** | Local ONNX deployment | make a dummy model available locally for inference, either via CLI or FastAPI wrapper | ONNX Runtime, FastAPI, packaging | early learning step - not maintained |
-| **2** | Naive cloud deployment | make the dummy model available in the cloud | EC2, security groups, SSH, FFmpeg/librosa | early learning step - not maintained |
-| **3** | Production-ready networking | make the model available at scale and securely; also export the real BAPE PyTorch model to ONNX | VPC design, ALB, NATGW, HA across AZs, MLOps | frozen snapshot |
-| **4** | Serverless Function  | Make the model available in the cloud as a FaaS with minimal maintenance overhead and zero idle costs | Lambda container image, ECR, CloudFront/S3 split, presigned URLs |  frozen snapshot |
-| **5** | Serverless container orchestration | Make the model instantaneously available (no cold starts) as a containerized application, reducing environment maintenance | ECS Fargate + Terraform, remote state, OIDC CI/CD GitHub Actions | frozen snapshot |
-| **6** | Real-Time production | Make model available for real-time inference | **WebSockets** on ALB/CloudFront, Web Audio API, right-sizing | frozen snapshot — runs, decision log pending |
-| **7** | Distributed hot/cold path orchestration | separate workload of real-time inference and post-processing for entire recording session, separating containers to improve performance  | SQS-driven async worker, second Fargate service, S3 events | active |
+|---|---|---|---|---|
+| **1** | Local ONNX deployment | make a dummy model available locally for inference, either via CLI or FastAPI wrapper | ONNX Runtime, FastAPI, packaging | early learning step - not maintained; dummy model outputs have no meaning |
+| **2** | Naive cloud deployment | make the dummy model available in the cloud | EC2, security groups, SSH, FFmpeg/librosa | early learning step - not maintained; dummy model outputs have no meaning |
+| **3** | Production-ready networking | make the model available at scale and securely; also export the real BAPE PyTorch model to ONNX | VPC design, ALB, NATGW, HA across AZs, MLOps | frozen snapshot, outputs not validated |
+| **4** | Serverless Function  | Make the model available in the cloud as a FaaS with minimal maintenance overhead and zero idle costs | Lambda container image, ECR, CloudFront/S3 split, presigned URLs |  frozen snapshot, outputs not validated |
+| **5** | Serverless container orchestration | Make the model instantaneously available (no cold starts) as a containerized application, reducing environment maintenance | ECS Fargate + Terraform, remote state, OIDC CI/CD GitHub Actions | frozen snapshot, outputs not validated |
+| **6** | Real-Time production | Make model available for real-time inference | **WebSockets** on ALB/CloudFront, Web Audio API, right-sizing | frozen snapshot — runs, decision log pending, output not validated |
+| **7** | Distributed hot/cold path orchestration | separate workload of real-time inference and post-processing for entire recording session, separating containers to improve performance  | SQS-driven async worker, second Fargate service, S3 events | active; model export uses a numerical-parity check against reference outputs from research before writing new exports |
+
+Model versions across phases: 
+- Phases 1–2 run a dummy model
+- Phases 3–6 each carry a dedicated ONNX export to estimate T60 params
+- Phase 7 runs two separate ONNX models for T60 and C50; exporter script able to export both, which wasn't the case before
 
 ---
 
