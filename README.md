@@ -105,9 +105,9 @@ The project evolved over separated stages to its latest design.
 | **1** | Local ONNX deployment | make a dummy model available locally for inference, either via CLI or FastAPI wrapper | ONNX Runtime, FastAPI, packaging | early learning step - not maintained; dummy model outputs have no meaning |
 | **2** | Naive cloud deployment | make the dummy model available in the cloud | EC2, security groups, SSH, FFmpeg/librosa | early learning step - not maintained; dummy model outputs have no meaning |
 | **3** | Production-ready networking | make the model available at scale and securely; also export the real BAPE PyTorch model to ONNX | VPC design, ALB, NATGW, HA across AZs, MLOps | frozen snapshot, outputs not validated |
-| **4** | Serverless Function  | Make the model available in the cloud as a FaaS with minimal maintenance overhead and zero idle costs | Lambda container image, ECR, CloudFront/S3 split, presigned URLs |  frozen snapshot, outputs not validated |
+| **4** | Serverless Function | Make the model available in the cloud as a FaaS with minimal maintenance overhead and zero idle costs | Lambda container image, ECR, CloudFront/S3 split, presigned URLs | frozen snapshot, outputs not validated |
 | **5** | Serverless container orchestration | Make the model instantaneously available (no cold starts) as a containerized application, reducing environment maintenance | ECS Fargate + Terraform, remote state, OIDC CI/CD GitHub Actions | frozen snapshot, outputs not validated |
-| **6** | Real-Time production | Make model available for real-time inference | **WebSockets** on ALB/CloudFront, Web Audio API, right-sizing | frozen snapshot — runs, decision log pending, output not validated |
+| **6** | Real-Time production | Make model available for real-time inference | **WebSockets** on ALB/CloudFront, Web Audio API, right-sizing | frozen snapshot; runs, decision log pending, outputs not validated |
 | **7** | Distributed hot/cold path orchestration | separate workload of real-time inference and post-processing for entire recording session, separating containers to improve performance  | SQS-driven async worker, second Fargate service, S3 events | active; model export uses a numerical-parity check against reference outputs from research before writing new exports |
 
 Model versions across phases: 
