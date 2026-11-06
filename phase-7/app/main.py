@@ -26,7 +26,7 @@ import math
 # Identify Base Directory
 BASE_DIR = Path(__file__).resolve().parent
 
-# env varibale to flag debugging and save a dump of the calculated spectrogram; set to 1, true or yes to run scripts/compare_pipelines.py.
+# env varibale to flag debugging and save a dump of the calculated spectrogram; setting to 1, true or yes will deliver outputs in app/models/ which can be comapred using compare_pipelines.py
 DEBUG_SPEC_DUMP = os.environ.get("DEBUG_SPEC_DUMP", "").lower() in ("1", "true", "yes")
 
 # Identify src directory for static files, which are used when running locally
@@ -46,8 +46,8 @@ C50_MODEL_PATH = BASE_DIR / "models" / "c50_bape_2025-11-18_19-33-41.onnx"
 # contextlib.asynccontextmanager used witht the lifespan parameter is recommended for defining app startup and shutdown in FastAPI
 
 # the @asynccontextmanager decorator creates an asynchronous context manager
-# it expects an asynchronous function which *yield*s exactly one value
-# the code before yield is run at startup, the code after at shutdown
+# it expects an asynchronous function which yields exactly one value
+# the code before `yield` is run at startup, the code after at shutdown
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     
@@ -122,7 +122,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     # initialize rolling audio buffer
     audio_buffer = np.array([], dtype=np.float32)
 
-    # initialize spectrogram_buffer
+    # initialize in-memory list of accumulated spectrograms
     accumulated_spec = []
 
     try:
@@ -228,7 +228,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     finally:
         if DEBUG_SPEC_DUMP and len(accumulated_spec) > 0:
             spec_hot = np.concatenate(accumulated_spec, axis=1) #stack on second dimension; shape is (nmels, time) or (16,100)
-            np.save(BASE_DIR / "models" / f"spec_hot_{session_id}.npy", spec_hot)
+            np.save(BASE_DIR / "models" / "npy-dumps" / f"spec_hot_{session_id}.npy", spec_hot)
 
 @app.get("/api/presigned-urls")
 # create presigned URLs
@@ -312,13 +312,12 @@ if static_dir.exists() and static_dir.is_dir():
 else: 
     logger.info("Static directory '/src' not found. Skipping static mount (Cloud Production Mode).")
 
-# conditional launch command to determine if run locally or on cloud
+# condition only true if script is run as entry point / locally
 if __name__ == "__main__":
-    # Fetch values from environment variables with fallback defaults ('127.0.0.1' and '8000') when env variables cant be resolved
+    # fall back to local address 127.0.0.1:8000
     host = os.environ.get("UVICORN_HOST", "127.0.0.1")
     port = int(os.environ.get("UVICORN_PORT", "8000"))
-    
-    logger.info(f"Launching Uvicorn on {host}:{port} ")
+    logger.info("Launching Uvicorn on %s:%s", host, port)
     
     uvicorn.run(
         "app.main:app", 

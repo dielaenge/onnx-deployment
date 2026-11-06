@@ -1,6 +1,0 @@
-[submodule "phase-3-proper-infra/src/bape"]
-	path = phase-3-proper-infra/src/bape
-	url = https://github.com/philipp-goetz/bape.git
-[submodule "phase-7/scripts/bape_local"]
-	path = phase-7/scripts/bape_local
-	url = https://github.com/philipp-goetz/bape.git

@@ -1,0 +1,17 @@
+# phase-7/.envrc.example
+
+# Copy to phase-7/.envrc (which must be gitignored) and fill in your data. 
+
+# Requires direnv: https://direnv.net for cloud deployment.
+# `app.main` can run locally but `app.worker` will need AWS access for presigned URLs and SQS queue.
+
+export AWS_PROFILE=<your-aws-profile>
+export ACCOUNT_ID=<your-account-id>
+export AWS_REGION=eu-central-1
+
+# Created by terraform/persistent. `terraform apply`ing it will give you the required outputs
+export SQS_QUEUE_URL=https://sqs.<region>.amazonaws.com/<account-id>/<queue-name>
+export APP_DATA_BUCKET_NAME=<your-bucket-name>
+
+# Only needed by scripts/param_estimator-onnx_exporter.py; see scripts/README.md
+path_add PYTHONPATH "$PWD/bape"

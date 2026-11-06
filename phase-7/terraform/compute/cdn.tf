@@ -1,12 +1,3 @@
-resource "aws_s3_bucket" "bape_phase7_frontend" {
-  bucket = "bape-phase7-frontend-davidg"
-
-  tags = {
-    Name = "frontend_bucket"
-  }
-}
-
-
 # See https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-restricting-access-to-s3.html
 data "aws_iam_policy_document" "origin_bucket_policy" {
   statement {
@@ -23,7 +14,7 @@ data "aws_iam_policy_document" "origin_bucket_policy" {
     ]
 
     resources = [
-      "${aws_s3_bucket.bape_phase7_frontend.arn}/*",
+      "${data.aws_s3_bucket.bape_frontend_bucket.arn}/*",
     ]
 
     condition {
@@ -42,8 +33,9 @@ data "aws_cloudfront_cache_policy" "caching_disabled" {
   name = "Managed-CachingDisabled"
 }
 
+
 resource "aws_s3_bucket_policy" "bape_phase7_frontend_bucket_policy" {
-  bucket = aws_s3_bucket.bape_phase7_frontend.bucket
+  bucket = data.aws_s3_bucket.bape_frontend_bucket.id
   policy = data.aws_iam_policy_document.origin_bucket_policy.json
 }
 
@@ -59,7 +51,7 @@ resource "aws_cloudfront_distribution" "bape_phase7_frontend_s3_distribution" {
   enabled = true
 
   origin {
-    domain_name              = aws_s3_bucket.bape_phase7_frontend.bucket_regional_domain_name
+    domain_name              = data.aws_s3_bucket.bape_frontend_bucket.bucket_regional_domain_name
     origin_id                = local.s3_origin_id
     origin_access_control_id = aws_cloudfront_origin_access_control.bape_phase7_oac.id
   }
@@ -129,4 +121,9 @@ resource "aws_cloudfront_distribution" "bape_phase7_frontend_s3_distribution" {
   tags = {
     Name = "CFDistribution"
   }
+}
+
+output "cf_distribution_url" {
+  description = "CloudFront disrtibution URL to access app."
+  value = "https://${aws_cloudfront_distribution.bape_phase7_frontend_s3_distribution.domain_name}"
 }

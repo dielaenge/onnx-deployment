@@ -14,8 +14,8 @@ uuid = sys.argv[1]
 SCRIPT_DIR = Path(__file__).resolve().parent
 BASE_DIR = SCRIPT_DIR.parent if SCRIPT_DIR.name == "scripts" else SCRIPT_DIR
 
-hot_path = BASE_DIR / "app" / "models" / f"spec_hot_{uuid}.npy"
-cold_path = BASE_DIR / "app" / "models" / f"spec_cold_{uuid}.npy"
+hot_path = BASE_DIR / "app" / "models" / "npy-dumps" / f"spec_hot_{uuid}.npy"
+cold_path = BASE_DIR / "app" / "models" / "npy-dumps" / f"spec_cold_{uuid}.npy"
 
 if not hot_path.exists():
     print(f"Error: Hot spectrogram not found at {hot_path}")

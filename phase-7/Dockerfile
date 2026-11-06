@@ -1,8 +1,11 @@
-# Pulls a pre-built image from Docker Hub that contains the FFMPEG static binaries // edited bc johnvansickle source was too unreliable
+# Pulls a pre-built image from Docker Hub that contains the FFMPEG static binaries
 FROM mwader/static-ffmpeg:6.1 AS ffmpeg_source
 
 # Use the official Docker image for Python 3.11
 FROM python:3.11-slim
+
+# get pinned uv version
+COPY --from=ghcr.io/astral-sh/uv:0.13.4 /uv /uvx /bin/
 
 # set WORKDIR, everything from here, happens in /app
 WORKDIR /app
@@ -11,30 +14,30 @@ WORKDIR /app
 COPY --from=ffmpeg_source /ffmpeg /usr/bin/
 COPY --from=ffmpeg_source /ffprobe /usr/bin/
 
-#install tar xz unzip and libsndfile // from yum to apt-get as we switched from an Amazon Linux distribution to a Debian/Red Hat 
-RUN apt-get update \
-    && apt-get install -y \
-    tar \
-    xz-utils \
-    gzip \
-    unzip \
-    libsndfile1 \
+# APT // install archive tooling // clear state information and package metadata
+# from yum to apt-get = switched from an Amazon Linux distribution to a Debian/Red Hat 
+RUN apt-get update && apt-get install -y \
+    tar xz-utils gzip unzip libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-# copy requirements and install dependencies
-COPY requirements.txt .
-
-#install CPU-only dependencies for torch to save space and time / download from explicit url to avoid dowonloading cuda backend; step separated from dependency installations to prevent conflicts
-RUN pip install --upgrade pip \ 
-    && pip install --no-cache-dir -r /app/requirements.txt
+# dependencies are synced with uv.lock, separate dependency and code layer and keep dependencies in cache when only app is edited
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    uv sync --locked --no-install-project
 
 # copy code
 COPY app/ app/
 
 # set env variables
-ENV PORT=8080
-ENV NUMBA_CACHE_DIR=/tmp
-ENV JOBLIB_TEMP_FOLDER=/tmp
+ENV UV_COMPILE_BYTECODE=1 \
+    # Enable copy mode to support bind mount caching
+    UV_LINK_MODE=copy \
+    PORT=8080 \
+    NUMBA_CACHE_DIR=/tmp \
+    JOBLIB_TEMP_FOLDER=/tmp \
+    # replaces manual venv activation
+    PATH="/app/.venv/bin:$PATH" 
 
 # Start the application
 # look for the app object in app/main.py
