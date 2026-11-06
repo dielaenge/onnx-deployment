@@ -9,6 +9,7 @@ provider "aws" {
   default_tags {
     tags = {
       Phase          = "phase7"
+      tf_layer       = "persistent"
       ManagedBy      = "Terraform"
       AWSEnvironment = "dev"
     }
