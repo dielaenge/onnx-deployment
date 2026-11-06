@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths: ['phase-7/**']
+    paths-ignore: ['**/*.md'] #don't run on README edits
   workflow_dispatch: # Adds a "Run Workflow" button in the GitHub UI!
 
 env:

@@ -1,10 +1,7 @@
 name: Build and Deploy - phase 6 (websockets)
 
 on:
-  push:
-    branches: [main]
-    paths: ['phase-6-production-ready/**']
-  workflow_dispatch: # Adds a "Run Workflow" button in the GitHub UI!
+  workflow_dispatch:
 
 env:
   AWS_REGION: eu-central-1
