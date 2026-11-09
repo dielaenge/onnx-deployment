@@ -3,8 +3,10 @@ name: Build and Deploy - phase 7 (Real time inference and distributed postproces
 on:
   push:
     branches: [main]
-    paths: ['phase-7/**']
-    paths-ignore: ['**/*.md'] #don't run on README edits
+    paths:
+      - 'phase-7/**'
+      - '!phase-7/*.md'
+      - '!phase-7/**/*.md'
   workflow_dispatch: # Adds a "Run Workflow" button in the GitHub UI!
 
 env:
