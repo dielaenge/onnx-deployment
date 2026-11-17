@@ -37,31 +37,31 @@ Each `phase-N-*/` directory is a self-contained snapshot of the architecture at 
 
 You speak into your browser microphone. 
 
-The main app
+The main app…
 1. streams your audio to an ECS Fargate container which
 2. normalizes the data and generates the input spectrogram
 3. runs real-time inference
 4. returns (both across 7 frequency bands)
    - T60 (reverberation time) and 
    - C50 (clarity index)  
-4. The estimates are rendered as live charts and a rolling spectrogram. 
+5. The frontend receives the estimates and renders them as live charts and a rolling spectrogram. 
 
-When you stop, 
-1. the full recording is cached in on client-side (and encoded to 16-bit PCM WAV)
+When you stop,… 
+1. the full recording is cached client-side (and encoded to 16-bit PCM WAV)
 2. the client sends a `GET` request to `api/presigned-urls`
-2. the API creates S3 presigned URLs for
+3. the API creates S3 presigned URLs for
    - `upload_url`, where the cached recording is uploaded to
    - `wav_download_url`, where the normalized wav will be available
    - `spec_download_url`, where the full spectrogram will be available
-3. client `PUT`s the file when the upload URL is available
-4. the upload triggers an S3 event notification which is sent to an SQS queue
-5. a second worker container polls the SQS queue
-6. the worker 
-   - uses `ffmpeg` to resample the input WAV (16kHz, mono)
+4. client `PUT`s the file when the upload URL is available
+5. the upload triggers an S3 event notification which is sent to an SQS queue
+6. a second worker container polls the SQS queue
+7. the worker 
+   - uses `ffmpeg` to resample the input WAV (16 kHz, mono)
    - calculates the complete spectrogram 
-   - loads the files to S3 using its IAM role
+   - uploads the files to S3 using its IAM role
    - deletes the message from the queue
-7. The frontend polls the presigned URLs and displays them when available.
+8. The frontend polls the presigned URLs and displays WAV file and spectrogram once they are available.
 
 ---
 
