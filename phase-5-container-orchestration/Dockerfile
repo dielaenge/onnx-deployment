@@ -7,11 +7,12 @@ FROM python:3.11-slim
 # set WORKDIR, everything from here, happens in /app
 WORKDIR /app
 
-# copyy FFMPEG from the source image
+# copy FFMPEG from the source image
 COPY --from=ffmpeg_source /ffmpeg /usr/bin/
 COPY --from=ffmpeg_source /ffprobe /usr/bin/
 
-#install tar xz unzip and libsndfile // from yum to apt-get as we switched from an Amazon Linux distribution to a Debian/Red Hat 
+#install tar, xz-utils, gzip, unzip and libsndfile 
+#from yum to apt-get as we switched from an Amazon Linux to a Debian distribution 
 RUN apt-get update \
     && apt-get install -y \
     tar \
@@ -24,7 +25,7 @@ RUN apt-get update \
 # copy requirements and install dependencies
 COPY requirements.txt .
 
-#install CPU-only dependencies for torch to save space and time / download from explicit url to avoid dowonloading cuda backend; step separated from dependency installations to prevent conflicts
+#install CPU-only dependencies for torch to save space and time / download from explicit url to avoid downloading cuda backend; step separated from dependency installations to prevent conflicts
 RUN pip install --upgrade pip \ 
     && pip install torch==2.2.2 torchaudio==2.2.2 --index-url https://download.pytorch.org/whl/cpu \ 
     && pip install --no-cache-dir -r /app/requirements.txt
