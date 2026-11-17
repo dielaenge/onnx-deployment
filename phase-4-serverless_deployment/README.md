@@ -8,7 +8,7 @@ Repackages the inference service as a container image on AWS Lambda, exposed thr
 Excursion: Spectrogram parity check validating that the serverless port matches previous pipeline (phase3) output.
 
 **Stack:** 
-- AWS Lambda (Python3.11 container image)
+- AWS Lambda (Python 3.11 container image)
 - Lambda Function URL
 - Docker
 - ECR

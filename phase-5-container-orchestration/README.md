@@ -13,6 +13,6 @@ Moves the service onto **ECS Fargate**, with the whole stack defined in **Terraf
 - Docker
 - ECR
 
-**Model:** `app/models/bape_2026-04-13_15-13-22.onnx`. T60 only, output not yet validated.
+**Model:** `app/models/bape_2026-04-13_15-13-22.onnx`. T60 only, outputs not yet validated.
 
 → Next: [Phase 6](../phase-6-production-ready) makes inference real-time.

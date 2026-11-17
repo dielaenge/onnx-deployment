@@ -13,7 +13,7 @@ Introduces a production-shaped network: a custom VPC with public and private sub
 - HTTPS/TLS
 - PyTorch → ONNX export
 
-**Model**: First ONNX export using the BAPE model architecture and weights. First exported as `onnx/speech_encoder.onnx`, then additionally as `onnx/super_param_estimator.onnx` to export `latent_vector`, the acoustic fingerprint. Estimated params produces T60 estimates. 
+**Model:** First ONNX export using the BAPE model architecture and weights. First exported as `onnx/speech_encoder.onnx`, then additionally as `onnx/super_param_estimator.onnx` to export `latent_vector`, the acoustic fingerprint. `estimated_params` are T60 estimates / inference results. 
 This phase’s export is a snapshot / result of my code archaeology and the attempt to retrace the original BAPE repo. 
 The T60 results at this stage have not yet been validated.
 

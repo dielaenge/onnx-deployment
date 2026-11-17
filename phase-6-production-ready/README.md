@@ -15,6 +15,6 @@ Replaces REST request/response with a stateful, low-latency **WebSocket** connec
 - Web Audio API
 - D3.js 
 
-**Model:** `app/models/bape_2026-04-13_15-13-22.onnx`. Same file as phase 5. T60 only, output not yet validated.
+**Model:** `app/models/bape_2026-04-13_15-13-22.onnx`. Same file as phase 5. T60 only, outputs not yet validated.
 
 → Next: [Phase 7](../phase-7) splits this into decoupled hot and cold paths.
