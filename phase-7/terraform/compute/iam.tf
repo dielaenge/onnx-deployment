@@ -55,8 +55,8 @@ resource "aws_iam_role" "ecs_worker_task_role" {
       Principal = { Service = "ecs-tasks.amazonaws.com" }
     }]
   })
-  tags = { 
-    Name = "bape-worker-task-role" 
+  tags = {
+    Name = "bape-worker-task-role"
   }
 }
 

@@ -20,7 +20,7 @@ resource "aws_security_group" "bape_alb_sg" {
 # ingress: incoming only from cloudfront distribution allowed
 resource "aws_vpc_security_group_ingress_rule" "bape_alb_sg_ingress" {
   security_group_id = aws_security_group.bape_alb_sg.id
-  prefix_list_id = data.aws_ec2_managed_prefix_list.cloudfront.id
+  prefix_list_id    = data.aws_ec2_managed_prefix_list.cloudfront.id
   from_port         = 80
   ip_protocol       = "tcp"
   to_port           = 80

@@ -72,29 +72,29 @@ resource "aws_ecs_task_definition" "task_definition_worker" {
   memory                   = 1024
   container_definitions = jsonencode([
     {
-      "name" = "worker-container"
-      "command" = ["python", "-m", "app.worker"]
-      "image" = "${data.aws_ecr_repository.bape_ecr.repository_url}:phase7"
+      "name"      = "worker-container"
+      "command"   = ["python", "-m", "app.worker"]
+      "image"     = "${data.aws_ecr_repository.bape_ecr.repository_url}:phase7"
       "essential" = true
       "environment" = [
         {
-          "name" = "NUMBA_CACHE_DIR",
+          "name"  = "NUMBA_CACHE_DIR",
           "value" = "/tmp"
         },
         {
-          "name" = "JOBLIB_TEMP_FOLDER",
+          "name"  = "JOBLIB_TEMP_FOLDER",
           "value" = "/tmp"
         },
         {
-          "name" = "SQS_QUEUE_URL",
+          "name"  = "SQS_QUEUE_URL",
           "value" = data.aws_sqs_queue.bape_queue.url
         },
         {
-          "name" = "APP_DATA_BUCKET_NAME",
+          "name"  = "APP_DATA_BUCKET_NAME",
           "value" = data.aws_s3_bucket.bape_bucket.id
         },
         {
-          "name" = "AWS_REGION",
+          "name"  = "AWS_REGION",
           "value" = data.aws_region.current.name
         }
       ]

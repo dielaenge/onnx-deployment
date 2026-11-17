@@ -24,9 +24,9 @@ resource "aws_ecr_lifecycle_policy" "bape_ecr_phase7" {
         rulePriority = 1
         description  = "Expire untagged images after 1 day"
         selection = {
-          tagStatus = "untagged"
-          countType = "sinceImagePushed"
-          countUnit = "days"
+          tagStatus   = "untagged"
+          countType   = "sinceImagePushed"
+          countUnit   = "days"
           countNumber = 1
         }
         action = {
@@ -37,8 +37,8 @@ resource "aws_ecr_lifecycle_policy" "bape_ecr_phase7" {
         rulePriority = 2
         description  = "Keep 5 most recent images"
         selection = {
-          tagStatus = "any"
-          countType = "imageCountMoreThan"
+          tagStatus   = "any"
+          countType   = "imageCountMoreThan"
           countNumber = 5
         }
         action = {

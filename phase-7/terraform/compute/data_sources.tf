@@ -1,11 +1,11 @@
 # Fetch app data bucket
 data "aws_s3_bucket" "bape_bucket" {
-    bucket = "bape-app-data-phase7-davidg"
+  bucket = "bape-app-data-phase7-davidg"
 }
 
 # Fetch frontend bucket
 data "aws_s3_bucket" "bape_frontend_bucket" {
-    bucket = "bape-phase7-frontend-davidg"
+  bucket = "bape-phase7-frontend-davidg"
 }
 
 # Fetch ECR repo

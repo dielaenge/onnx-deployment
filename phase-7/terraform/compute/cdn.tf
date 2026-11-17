@@ -125,5 +125,5 @@ resource "aws_cloudfront_distribution" "bape_phase7_frontend_s3_distribution" {
 
 output "cf_distribution_url" {
   description = "CloudFront disrtibution URL to access app."
-  value = "https://${aws_cloudfront_distribution.bape_phase7_frontend_s3_distribution.domain_name}"
+  value       = "https://${aws_cloudfront_distribution.bape_phase7_frontend_s3_distribution.domain_name}"
 }
