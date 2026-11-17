@@ -7,6 +7,7 @@ on:
       - 'phase-7/**'
       - '!phase-7/*.md'
       - '!phase-7/**/*.md'
+      - '!phase-7/terraform/**'
   workflow_dispatch: # Adds a "Run Workflow" button in the GitHub UI!
 
 env:
@@ -59,10 +60,10 @@ jobs:
         IMAGE_TAG: ${{ github.sha }} # tag with the git commit SHA
       run: |
         # We build for AMD64 (Fargate) and tag it twice: once with the Git SHA, and once as "phase7"
-        docker build --platform=linux/amd64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:phase7 .
+        docker build --platform=linux/amd64 -t "$ECR_REGISTRY"/"$ECR_REPOSITORY":"$IMAGE_TAG" -t "$ECR_REGISTRY"/"$ECR_REPOSITORY":phase7 .
         
         # The -a flag pushes ALL tags associated with this image
-        docker push -a $ECR_REGISTRY/$ECR_REPOSITORY
+        docker push -a "$ECR_REGISTRY"/"$ECR_REPOSITORY"
 
     - name: Force ECS Update
       run: |
