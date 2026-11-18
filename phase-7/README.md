@@ -11,44 +11,10 @@ The design goal:
 Establishing a real-time inference service was a valuable increment but, in the interest of research users, both live results and analysis of (past) recording sessions must be made available.
 This is foundational to separating pipelines: post-processing a full recording must never introduce latency to or drop a live connection. 
 
-Thus, live-inference and post-processing run on two separate paths as separate Fargate services from the same image. They communicate via S3 event notifications which occur when a recording ends, presigned URLS are generated and land in the SQS queue from where the worker process takes over.
+Thus, live-inference and post-processing run on two separate paths as separate Fargate services from the same image. They communicate via S3 event notifications which occur when a recording ends and is uploaded to a presigned URL. The worker polls the SQS queue for uploads and processes them when available.
 
 ## Architecture
-
-```mermaid
-flowchart TB
-    subgraph Browser
-        MIC[Mic → `RealTimeAudioProcessor`<br/>`src/processor.js`]
-        VIZ[D3 charts + spectrogram canvas]
-    end
-
-    CF[CloudFront<br/>static HTML/CSS/JS frontend from S3 / OAC]
-
-    subgraph HOT["Hot path — bape_ecs_service (Fargate, behind ALB)"]
-        WS["WS /ws — FastAPI"]
-        SPEC[MelSpectrogram once per chunk]
-        T60[(T60 ONNX)]
-        C50[(C50 ONNX)]
-    end
-
-    subgraph COLD["Cold path — worker_ecs_service (Fargate, no LB)"]
-        WK[worker.py — long-polls SQS]
-        FF[FFmpeg normalize + full-res MelSpectrogram]
-    end
-
-    Q[[SQS bape-cold-path-queue]]
-    S3[(S3 bape_app_data_phase7<br/>uploads/ · processed/ · spectrograms/)]
-
-    MIC -- 200ms Float32 chunks --> WS
-    WS --> SPEC --> T60 & C50
-    T60 & C50 -- JSON params/quantiles + spectrogram --> VIZ
-    CF -. serves .-> Browser
-
-    MIC -- on stop: WAV --> S3
-    S3 -- ObjectCreated uploads/ --> Q
-    Q --> WK --> FF --> S3
-    S3 -. presigned GET poll .-> VIZ
-```
+see [main README.md](../README.md#current-architecture-phase-7)
 
 ## Hot path
 
@@ -60,7 +26,7 @@ Browser mic audio is
 The server ([`app/main.py`](app/main.py) `WS /ws`) 
 - keeps a rolling **4 s (64000-sample) [`audio_buffer` and runs an inference loop](https://github.com/dielaenge/onnx-deployment/blob/106f0a5ab71e4ff428a1a68442eb474918217c61/phase-7/app/main.py#L123-L167)**, 
   - deletes the oldest 200ms/3200 sample-chunks and adds new, incoming chunks,
-- processes a new 4 second spectrogram every 200ms (), and 
+- processes a new 4 second spectrogram every 200ms, and 
 - [runs both ONNX models **concurrently**](https://github.com/dielaenge/onnx-deployment/blob/106f0a5ab71e4ff428a1a68442eb474918217c61/phase-7/app/main.py#L169-L176) 
 - streams back response_json (params / quantiles / latents for both models, the newest spectrogram `spectrogram_latest100frames`, and `inference_time_ms`). Measured inference is ~30–60 ms per stride after warmup.
 

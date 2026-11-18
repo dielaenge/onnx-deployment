@@ -38,9 +38,9 @@ Each `phase-N-*/` directory is a self-contained snapshot of the architecture at 
 You speak into your browser microphone. 
 
 The main app…
-1. streams your audio to an ECS Fargate container which
+1. streams your audio to the `bape_ecs_service` container (running on ECS Fargate) which
 2. normalizes the data and generates the input spectrogram
-3. runs real-time inference
+3. runs real-time inference using `onnxruntime`
 4. returns (both across 7 frequency bands)
    - T60 (reverberation time) and 
    - C50 (clarity index)  
@@ -53,13 +53,13 @@ When you stop,…
    - `upload_url`, where the cached recording is uploaded to
    - `wav_download_url`, where the normalized wav will be available
    - `spec_download_url`, where the full spectrogram will be available
-4. client `PUT`s the file when the upload URL is available
-5. the upload triggers an S3 event notification which is sent to an SQS queue
-6. a second worker container polls the SQS queue
+4. client `PUT`s the file to the app data bucket (`uploads/` prefix) when the upload URL is available
+5. the upload triggers an S3 event notification (`ObjectCreated`) which has the objecvt key is sent to the `bape-cold-path-queue` SQS queue
+6. a second `worker_ecs_service` container (running on ECS Fargate) polls the SQS queue
 7. the worker 
-   - uses `ffmpeg` to resample the input WAV (16 kHz, mono)
+   - uses `FFmpeg` to resample the input WAV (16 kHz, mono)
    - calculates the complete spectrogram 
-   - uploads the files to S3 using its IAM role
+   - uploads the files to S3 (to `processed/` and `spectrograms/`) using its IAM role
    - deletes the message from the queue
 8. The frontend polls the presigned URLs and displays WAV file and spectrogram once they are available.
 
@@ -70,41 +70,48 @@ When you stop,…
 The production stage splits inference into a latency-sensitive **hot path** and a decoupled, CPU-heavy **cold path**, so real-time WebSocket sessions are never starved by full-recording processing.
 
 ```mermaid
-flowchart TB
+flowchart TD
+    U([User])
+
     subgraph Client[Browser]
-      MIC[AudioWorklet mic capture]
+        APP[Browser app<br/>app.js]
     end
-      Client -- default --> CF
-      MIC[AudioWorklet mic capture] -->|200ms chunks / WS| CF
-      MIC -->|full WAV on stop| CF
 
-    CF[CloudFront · OAC + cache behaviors]
-    CF -->|default| S3F[(S3 Frontend Bucket </br> index.html)]
-
-    subgraph VPC[VPC — 2 public / 2 private subnets, no NAT GW]
-      ALB[Application Load Balancer]
-      subgraph HOT[Hot path — Fargate bape_ecs_service]
-        WS[FastAPI WS · MelSpectrogram · T60/C50 concurrent ONNX]
-      end
-      subgraph COLD[Cold path — Fargate worker_ecs_service]
-        WK[· normalize with FFmpeg </br>· create full spectrogram]
-      end
-      VPCE[VPC Endpoints: S3 / ECR / Logs / SQS]
+    subgraph Edge[AWS edge locations]
+        CF[CloudFront distribution]
     end
-    CF -->|/ws*, /api/*| ALB --> WS
-    WS -->|generate presigned PUT/GET URLs| S3D
-    S3D[(S3 Data Bucket </br> Folders: uploads/ processed/ spectrograms/<br/>1-day lifecycle)]
-    S3D -->| S3 Event Notif: ObjectCreated: uploads/| SQS[ SQS </br> bape-cold-path-queue]
-    SQS -- polls --> WK --> S3D
-    WK -.-> VPCE
-    WS -.-> VPCE
-    VPCE -- pulls image --> ECR[Elastic Container Registry]
-    VPCE -- writes logs --> CW[CloudWatch]
+
+    subgraph Region[AWS eu-central-1]
+        S3F[(S3: frontend bucket<br/>index.html, app.js)]
+        ALB[Application Load Balancer]
+        subgraph ECS[ECS Fargate]
+            HOT[Hot path: bape_ecs_service runs onnxruntime/inference]
+            WK[Cold path: worker_ecs_service processes with FFmpeg and MelSpectrogram]
+        end
+        S3D[(S3: app data bucket<br/>prefixes: uploads/, processed/, spectrograms/<br/>1-day lifecycle)]
+        Q[[SQS: bape-cold-path-queue]]
+    end
+
+    %% Kanten hier, nummeriert wie die Liste im Chat
+    %% Konvention: -->  sync (Aufrufer wartet)
+    %%             -.-> async (Event, Queue, Push, Stream)
+    %% Beispiele:  A -->|text| B      A -. text .-> B
+
+
+U -->|records audio| APP
+APP -->| GET index.html, app.js | CF
+CF -->| GET on cache miss via OAC | S3F
+APP -. 200 ms audio chunks <br/>(via WebSocket) .-> CF -. 200 ms chunk .-> ALB -. 200 ms chunk .-> HOT
+HOT -. T60/C50 inference results .-> ALB -.-> CF -.-> APP
+APP -->|on record stop: GET presigned URLs via /api/presigned-urls| CF --> ALB --> HOT
+APP -->| WAV from cache to uploads/ | S3D
+S3D -. S3 event notification: ObjectCreated in uploads/ .-> Q
+WK -->| long poll queue ><br/> ReceiveMessage with object key | Q
+WK -->| GET WAV from object key| S3D
+WK -->| PUT WAV to processed/ and spectrogram to spectrograms/| S3D
+WK -->|DeleteMessage| Q
+APP -->| GET full WAV and spectrogram| S3D
 ```
-
-**Hot path:** User starts recording using microphone → `AudioWorklet` is created and captures audio stream → 200 ms binary chunks are streamed over WebSocket and cached in an `offlineAudioBuffer` → another rolling 4 second buffer (required input length of onnx model) is created, filled and forwarded → a spectrogram is calculated using the `MelSpectrogram` class from `librosa` → spectrogram data is fed into T60 & C50 ONNX sessions, which run **concurrently** (`asyncio.gather`) every 200ms (→ rolling buffer is cut off by last 200ms to make space for new input) → JSON streamed back permanently for live D3 charts until user stops recording (→ triggering cold path processing)
-
-**Cold path:** On stop, the browser encodes data from `offlineAudioBuffer` to WAV client-side to take load off of backend → queries API of main container to get **presigned S3 URLs** → uploads entire audio **directly to S3** (bypassing the API) → an S3 event notification `ObjectCreated` event is sent to **SQS** → a dedicated Fargate worker container polls the queue → worker normalizes with FFmpeg, regenerates a full-resolution spectrogram, and writes files to S3 → client polls presigned URLs from which the processed files become available → when available, results are downloaded from S3, rendered to frontend → *if* successful, the event notification is deleted from the SQS queue.
 
 ---
 
