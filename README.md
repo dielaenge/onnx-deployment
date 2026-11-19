@@ -85,10 +85,10 @@ flowchart TD
         S3F[(S3: frontend bucket<br/>index.html, app.js)]
         ALB[Application Load Balancer]
         subgraph ECS[ECS Fargate]
-            HOT[Hot path: bape_ecs_service runs onnxruntime/inference]
-            WK[Cold path: worker_ecs_service processes with FFmpeg and MelSpectrogram]
+            HOT[Hot path:<br/>bape_ecs_service<br/>runs onnxruntime/inference]
+            WK[Cold path:<br/>worker_ecs_service<br/>processes with FFmpeg and MelSpectrogram]
         end
-        S3D[(S3: app data bucket<br/>prefixes: uploads/, processed/, spectrograms/<br/>1-day lifecycle)]
+        S3D[(S3: app data bucket<br/>prefixes:<br/>uploads/,<br/>processed/,<br/>spectrograms/<br/>1-day lifecycle)]
         Q[[SQS: bape-cold-path-queue]]
     end
 
@@ -103,10 +103,10 @@ APP -->| GET index.html, app.js | CF
 CF -->| GET on cache miss via OAC | S3F
 APP -. 200 ms audio chunks <br/>(via WebSocket) .-> CF -. 200 ms chunk .-> ALB -. 200 ms chunk .-> HOT
 HOT -. T60/C50 inference results .-> ALB -.-> CF -.-> APP
-APP -->|on record stop: GET presigned URLs via /api/presigned-urls| CF --> ALB --> HOT
+APP -->|on record stop:<br/>GET presigned URLs via <br/>/api/presigned-urls| CF --> ALB --> HOT
 APP -->| WAV from cache to uploads/ | S3D
-S3D -. S3 event notification: ObjectCreated in uploads/ .-> Q
-WK -->| long poll queue ><br/> ReceiveMessage with object key | Q
+S3D -. S3 event notif:<br/>ObjectCreated in uploads/ .-> Q
+WK -->| long poll queue ><br/>ReceiveMessage with object key | Q
 WK -->| GET WAV from object key| S3D
 WK -->| PUT WAV to processed/ and spectrogram to spectrograms/| S3D
 WK -->|DeleteMessage| Q
