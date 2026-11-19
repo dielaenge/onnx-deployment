@@ -71,6 +71,7 @@ The production stage splits inference into a latency-sensitive **hot path** and 
 
 ```mermaid
 flowchart TD
+%%Elements
     U([User])
 
     subgraph Client[Browser]
@@ -92,11 +93,7 @@ flowchart TD
         Q[[SQS: bape-cold-path-queue]]
     end
 
-    %% Kanten hier, nummeriert wie die Liste im Chat
-    %% Konvention: -->  sync (Aufrufer wartet)
-    %%             -.-> async (Event, Queue, Push, Stream)
-    %% Beispiele:  A -->|text| B      A -. text .-> B
-
+%%Relations
 
 U -->|records audio| APP
 APP -->| GET index.html, app.js | CF
