@@ -32,7 +32,7 @@ resource "aws_s3_bucket_cors_configuration" "cors_config_phase7_app_data_bucket"
       # when running on AWS: "https://${aws_cloudfront_distribution.bape_phase7_frontend_s3_distribution.domain_name}",
       "http://127.0.0.1:8000",
       "http://localhost:8000",
-      "*"
+      "*" #catch all because CloudFront URL is dynamically generated on deploy >> must become either variable or static R53 domain
     ]
     expose_headers  = []
     max_age_seconds = 3000
