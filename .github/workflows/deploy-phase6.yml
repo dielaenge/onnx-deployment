@@ -52,8 +52,8 @@ jobs:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         IMAGE_TAG: ${{ github.sha }} # We tag with the Git Commit SHA for history!
       run: |
-        # We build for AMD64 (Fargate) and tag it twice: once with the Git SHA, and once as "latest"
-        docker build --platform=linux/amd64 -t "$ECR_REGISTRY"/"$ECR_REPOSITORY":"$IMAGE_TAG" -t "$ECR_REGISTRY"/"$ECR_REPOSITORY":latest .
+        # We build for AMD64 (Fargate) and tag it twice: once with the Git SHA, and once as "phase6"
+        docker build --platform=linux/amd64 -t "$ECR_REGISTRY"/"$ECR_REPOSITORY":"$IMAGE_TAG" -t "$ECR_REGISTRY"/"$ECR_REPOSITORY":phase6 .
         
         # The -a flag pushes ALL tags associated with this image
         docker push -a "$ECR_REGISTRY"/"$ECR_REPOSITORY"
