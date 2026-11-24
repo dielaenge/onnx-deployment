@@ -53,10 +53,10 @@ jobs:
         IMAGE_TAG: ${{ github.sha }} # We tag with the Git Commit SHA for history!
       run: |
         # We build for AMD64 (Fargate) and tag it twice: once with the Git SHA, and once as "latest"
-        docker build --platform=linux/amd64 -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+        docker build --platform=linux/amd64 -t "$ECR_REGISTRY"/"$ECR_REPOSITORY":"$IMAGE_TAG" -t "$ECR_REGISTRY"/"$ECR_REPOSITORY":latest .
         
         # The -a flag pushes ALL tags associated with this image
-        docker push -a $ECR_REGISTRY/$ECR_REPOSITORY
+        docker push -a "$ECR_REGISTRY"/"$ECR_REPOSITORY"
 
     - name: Force ECS Update
       run: |
