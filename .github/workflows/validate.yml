@@ -18,7 +18,6 @@ jobs:
             
             - name: check terraform formatting
               run: terraform fmt -check -recursive
-              if: ${{ !cancelled() }}
 
             - name: validate terraform directories
               run: |
@@ -29,5 +28,6 @@ jobs:
                     terraform -chdir="$d" validate || { validation_failed=1; }
                 done
                 exit "$validation_failed"
+              if: ${{ !cancelled() }}
             
 
