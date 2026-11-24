@@ -23,7 +23,7 @@ jobs:
           validation_failed=0
           for d in $(find . -name "*.tf" -not -path "*/.terraform/*" -exec dirname {} \; | sort -u); do
             echo "== $d"
-              terraform -chdir="$d" init -backend=false -input=false || { validation_failed=1; continue; }
+              terraform -chdir=$d init -backend=false -input=false || { validation_failed=1; continue; }
               terraform -chdir="$d" validate || { validation_failed=1; }
           done
           exit "$validation_failed"
