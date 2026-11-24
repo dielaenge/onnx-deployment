@@ -8,7 +8,7 @@ resource "aws_security_group" "bape_alb_sg" {
   vpc_id      = aws_vpc.bape-vpc.id
 
   tags = {
-    Name  = "bape_alb_sg"
+    Name = "bape_alb_sg"
   }
 }
 
@@ -21,7 +21,7 @@ resource "aws_vpc_security_group_ingress_rule" "bape_alb_sg_ingress" {
   to_port           = 80
 
   tags = {
-    Name  = "bape_alb_sg_ingress"
+    Name = "bape_alb_sg_ingress"
   }
 }
 
@@ -35,7 +35,7 @@ resource "aws_vpc_security_group_egress_rule" "bape_alb_sg_egress" {
   to_port                      = 8080
 
   tags = {
-    Name  = "bape_alb_sg_egress"
+    Name = "bape_alb_sg_egress"
   }
 }
 
@@ -52,7 +52,7 @@ resource "aws_lb" "bape_alb" {
   idle_timeout = 3600
 
   tags = {
-    Name  = "bape-alb"
+    Name = "bape-alb"
   }
 }
 
@@ -77,7 +77,7 @@ resource "aws_lb_target_group" "bape_alb_tg" {
   }
 
   tags = {
-    Name  = "bape-alb-tg"
+    Name = "bape-alb-tg"
   }
 }
 
@@ -93,6 +93,6 @@ resource "aws_lb_listener" "bape_alb_listener" {
   }
 
   tags = {
-    Name  = "bape-alb-listener"
+    Name = "bape-alb-listener"
   }
 }

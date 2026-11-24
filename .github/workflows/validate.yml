@@ -1,0 +1,33 @@
+name: validate
+on:
+    pull_request:
+    push:
+        branches: [main]
+        paths: ['**.tf', '.github/workflows/validate.yml', '**/.terraform.lock.hcl']
+jobs:
+    terraform:
+    
+        name: Terraform Validate
+        runs-on: ubuntu-latest
+        steps:
+
+            - uses: actions/checkout@v7
+            - uses: hashicorp/setup-terraform@v4
+              with: 
+                terraform_version: 1.17.2
+            
+            - name: check terraform formatting
+              run: terraform fmt -check -recursive
+
+            - name: validate terraform directories
+              run: |
+                validation_failed=0
+                for d in $(find . -name "*.tf" -not -path "*/.terraform/*" -exec dirname {} \; | sort -u); do
+                  echo "== $d"
+                    terraform -chdir="$d" init -backend=false -input=false || { validation_failed=1; continue; }
+                    terraform -chdir="$d" validate || { validation_failed=1; }
+                done
+                exit "$validation_failed"
+              if: ${{ !cancelled() }}
+            
+

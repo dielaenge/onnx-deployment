@@ -81,7 +81,7 @@ resource "aws_ecs_service" "bape_service" {
     container_port   = 8080
   }
 
-    tags = {
+  tags = {
     Name = "bape_ecs_service"
   }
 
