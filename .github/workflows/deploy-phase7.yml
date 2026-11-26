@@ -4,10 +4,10 @@ on:
   push:
     branches: [main]
     paths:
-      - 'phase-7/**'
-      - '!phase-7/*.md'
-      - '!phase-7/**/*.md'
-      - '!phase-7/terraform/**'
+      - 'phase-7/app/**'
+      - 'phase-7/Dockerfile'
+      - 'phase-7/pyproject.toml'
+      - 'phase-7/uv.lock'
   # Add "Run Workflow" button in the GitHub UI
   workflow_dispatch: 
 
