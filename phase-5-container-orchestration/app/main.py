@@ -10,11 +10,11 @@ import logging
 import uuid
 from pathlib import Path
 
-# Identify Base Directory
-BASE_DIR = Path(__file__).resolve().parent
-
 from .inference_engine import AcousticModelProcessor
 from .audio_utils import preprocess_audio
+
+# Identify Base Directory
+BASE_DIR = Path(__file__).resolve().parent
 
 # --- Logging Setup ---
 logging.basicConfig(

@@ -5,6 +5,14 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from hydra.utils import to_absolute_path, instantiate
 import logging
+# app-specific imports
+import librosa
+import torch
+import torch.nn as nn
+import numpy as np
+
+# imports from local modules
+from src.util.signals import MelSpectrogram
 
 # --- Logging Setup ---
 logging.basicConfig(
@@ -18,19 +26,9 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 logger.debug("Exporter script running from %s.", PROJECT_ROOT)
 
-
-# app-specific imports
-import librosa
-import torch
-import torch.nn as nn
-import numpy as np
-
-# imports from local modules
-from src.util.signals import MelSpectrogram
-
 # Note: paths and model configs are provided via Hydra config (`conf/exporter.yaml`).
 
-# Reference arrays removed; exporter now requires an external `.pt` reference file (cfg.output_tuple)
+# exporter requires an external `.pt` reference file (cfg.output_tuple)
 
 timestamp = datetime.now().strftime(f"%Y-%m-%d_%H-%M-%S")
 
