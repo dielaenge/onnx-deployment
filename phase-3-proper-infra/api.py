@@ -1,12 +1,9 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-import os
 import uvicorn
 import time
-import json
 import logging
-import uuid
 
 from src.model_processor import AcousticModelProcessor
 from src.audio_processor import transform_audio_to_spectrogram

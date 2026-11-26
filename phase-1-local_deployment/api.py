@@ -1,11 +1,10 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 import uvicorn
 import time
-import json
 import logging
 
 from src.model_processor import AcousticModelProcessor
-from src.audio_processor import preprocess_from_bytes, TARGET_SR
+from src.audio_processor import preprocess_from_bytes
 
 # --- Logging Setup ---
 logging.basicConfig(

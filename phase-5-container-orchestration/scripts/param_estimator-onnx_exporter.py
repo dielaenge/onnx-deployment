@@ -1,5 +1,4 @@
 import sys
-import os
 from pathlib import Path
 from datetime import datetime
 
@@ -7,7 +6,6 @@ import librosa
 import torch
 import torch.nn as nn
 import numpy as np
-from omegaconf import OmegaConf
 
 # --- Path logic ---
 # Get directory of this script
@@ -28,7 +26,6 @@ from scripts.bape_local.src.model.param_estimator import ParameterEstimator as O
 from scripts.bape_local.src.model.speech_encoder import SpeechEncoder
 from scripts.bape_local.src.model.cnn2d import CNNEncoder
 from scripts.bape_local.src.model.seq import SequenceModel
-from scripts.bape_local.src.util.layers import SelfAttentionPooling
 from scripts.bape_local.src.model.mlp import RegressionHead
 
 # Define all I/O paths (bape repository must be vendored to src/bape_local)
@@ -209,7 +206,7 @@ print("\nModel set to evaluation mode.")
 
 # II. Instantiate a MelSpectrogram object
 
-print(f"\n\nStep 4: Prepare input for onnx export.")
+print("\n\nStep 4: Prepare input for onnx export.")
 print("Instantiating MelSpectrogram object `preprocessor`…")
 
 preprocessor = MelSpectrogram(
@@ -232,7 +229,7 @@ print(f"…done.\nReference audio loaded from {REF_AUDIO_PATH} with shape {ref_a
 preprocessed_2d_tensor = preprocessor(ref_audio)
 print(f"Transformed ref_audio to 2D Spectrogram with shape: {preprocessed_2d_tensor.shape}.\nStandardizing…")
 preprocessed_2d_tensor = (preprocessed_2d_tensor - preprocessed_2d_tensor.mean()) / (preprocessed_2d_tensor.std() + 1e-8)
-print(f"…done.\nAdding Dimensions…")
+print("…done.\nAdding Dimensions…")
 
 final_4d_tensor = preprocessed_2d_tensor.unsqueeze(0).unsqueeze(0)
 print(f"…done.\nInput ready for onnx export. Shape is {final_4d_tensor.shape} and should be [Batch = 1, Channel = 1, Height = 16, Width= 2000].\nRunning unit test to verify…\n")

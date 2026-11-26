@@ -145,7 +145,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
             #check if buffer has enough data for 4 seconds (required by onnx model)
             if len(audio_buffer) >= 64000:
-                print(f"4 second window available. Ready to run inference.")
+                print("4 second window available. Ready to run inference.")
                 spectrogram_chunk = melspec_preprocessor(audio_buffer)
 
                 # calculate mean and standard

@@ -1,4 +1,3 @@
-import sys
 from pathlib import Path
 from datetime import datetime
 import hydra
@@ -30,7 +29,7 @@ logger.debug("Exporter script running from %s.", PROJECT_ROOT)
 
 # exporter requires an external `.pt` reference file (cfg.output_tuple)
 
-timestamp = datetime.now().strftime(f"%Y-%m-%d_%H-%M-%S")
+timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
 
 @hydra.main(config_path="../conf", config_name="exporter", version_base=None)

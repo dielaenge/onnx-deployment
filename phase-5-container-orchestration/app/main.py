@@ -5,7 +5,6 @@ from botocore.exceptions import ClientError
 from fastapi import FastAPI, UploadFile, File, HTTPException
 import uvicorn
 import time
-import json
 import logging
 import uuid
 from pathlib import Path

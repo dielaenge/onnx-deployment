@@ -1,11 +1,9 @@
-import sys
 import os
 
 import uuid
 import subprocess
 import logging
 import io
-import pathlib
 
 import numpy as np
 import matplotlib

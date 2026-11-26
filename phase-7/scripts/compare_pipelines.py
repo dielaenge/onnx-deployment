@@ -56,7 +56,7 @@ best_time_offset_sec = best_offset / 500.0  # 500 frames per second
 spec_cold_aligned = spec_cold[:, best_offset:best_offset + hot_len]
 max_deviation = np.max(np.abs(spec_hot - spec_cold_aligned))
 
-print(f"\n--- EMPIRICAL DRIFT ANALYSIS (SLIDING ALIGNMENT) ---")
+print("\n--- EMPIRICAL DRIFT ANALYSIS (SLIDING ALIGNMENT) ---")
 print(f"Best Temporal Offset:  {best_offset} frames ({best_time_offset_sec:.3f} seconds)")
 print(f"Minimum Mean Squared Error (MSE): {best_mse:.8f}")
 print(f"Max Absolute Error at Match:      {max_deviation:.8f}")
