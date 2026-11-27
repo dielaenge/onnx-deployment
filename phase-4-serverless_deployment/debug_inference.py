@@ -1,4 +1,3 @@
-import os
 import sys
 import librosa
 from src.audio_processor import MelSpectrogram

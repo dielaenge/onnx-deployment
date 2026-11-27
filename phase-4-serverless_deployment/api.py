@@ -1,4 +1,3 @@
-import os
 import boto3
 from botocore.exceptions import ClientError
 # Check environment variables of Lambda function
@@ -8,7 +7,6 @@ from botocore.exceptions import ClientError
 from fastapi import FastAPI, UploadFile, File, HTTPException
 import uvicorn
 import time
-import json
 import logging
 import uuid
 

@@ -1,6 +1,5 @@
 import onnxruntime as ort
 import numpy as np
-from pathlib import Path
 import logging
 
 logger = logging.getLogger(__name__)

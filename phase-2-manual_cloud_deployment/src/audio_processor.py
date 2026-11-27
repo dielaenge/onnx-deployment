@@ -1,6 +1,5 @@
 import numpy as np
 import librosa
-import soundfile as sf
 import io
 
 TARGET_SR = 16000 # target sample rate – placeholder value but a common one

@@ -4,8 +4,6 @@ import os
 import torch
 import torch.nn as nn
 import numpy as np
-from omegaconf import OmegaConf
-
 
 # Add the BAPE source root to the Python path
 # Adjust the path string to match the actual directory structure relative to this script
@@ -19,7 +17,6 @@ from src.model.param_estimator import ParameterEstimator as OriginalEstimator
 from src.model.speech_encoder import SpeechEncoder
 from src.model.cnn2d import CNNEncoder
 from src.model.seq import SequenceModel
-from src.util.layers import SelfAttentionPooling
 from src.model.mlp import RegressionHead
 
 # I. Assembling the model, the architectural shell, from scratch
