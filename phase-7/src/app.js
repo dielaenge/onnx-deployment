@@ -74,9 +74,22 @@ async function startRecording(){
     }, 1000);
 
     // get the mic stream
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    micStream = await navigator.mediaDevices.getUserMedia({ 
+        "audio": {
+            "echoCancellation": false,
+            "noiseSuppression": false,
+            "autoGainControl": false
+            } 
+         });
+    // gets current configuration of the track's constrainable properties and log it to console
+    const trackSettings = micStream.getAudioTracks()[0].getSettings()
+    console.log("Mic track settings:", trackSettings);
+    console.log("Mic sample rate:", trackSettings.sampleRate)
     // set mic to record at 16kHz sample rate
-    audioContext = new AudioContext({sampleRate: 16000});
+    audioContext = new AudioContext({
+        "sampleRate": 16000});
+    // check
+    console.log("audioContext sample rate", audioContext.sampleRate)
     // set mic stream as source
     const source = audioContext.createMediaStreamSource(micStream);
     // load external processor.js script into the AudioContext
