@@ -1,0 +1,26 @@
+# ruff.toml
+extend-exclude = [
+    # vendored BAPE code
+    "phase-3-proper-infra/src/BAPE_src",
+    "phase-3-proper-infra/src/bape",
+    "phase-4-serverless_deployment/src/bape",
+    "phase-5-container-orchestration/scripts/bape_local",
+    "phase-6-production-ready/scripts/bape_local",
+    "phase-7/bape",
+    # debugging scripts referenced in phase-5 decision log; not runnable
+    "phase-5-container-orchestration/docs/debug-scripts",
+]
+
+[lint]
+select = [
+    "E4",
+    "E7",
+    "E9",
+    "F"
+]
+
+[lint.per-file-ignores]
+# vendored BAPE dependencies are imported after sys.path is extended
+"phase-3-proper-infra/onnx/param_estimator-onnx_exporter.py" = ["E402"]
+"phase-5-container-orchestration/scripts/param_estimator-onnx_exporter.py" = ["E402"]
+"phase-6-production-ready/scripts/param_estimator-onnx_exporter.py" = ["E402"]
