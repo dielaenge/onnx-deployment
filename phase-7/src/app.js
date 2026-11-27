@@ -31,14 +31,14 @@ let audioContext;
 let micStream;
 
 
-// liveStreamingBuffer will be used to store 32000 samples / 2 seconds of audio and then send it
+//used to collect samples and forward them when full
 let liveStreamingBuffer = [];
 
 // offlineAudioBuffer caches the entire recording to make it available for cold path processing
 let offlineAudioBuffer = [];
 
 let currentTimelineData = []; // was null before, now empty array
-let timeCounter = 0; // will serve as time indicator and be increased by 2 for every chunk
+let timeCounter = 0; // will serve as time indicator and be increased for every chunk
 
 let lockedT60ParamId = null;
 let lockedC50ParamId = null;
